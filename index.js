@@ -13,19 +13,27 @@ const globLang = require('glob');
 
 let langDict = {};
 
+let langList = {};
+
 const port = config.get('port');
 const signing_secret = config.get('signing_secret');
 const slackCommand = config.get('command');
 const helpLink = config.get('help_link');
 const supportUrl = config.get('support_url');
-const appLang = config.get('app_lang');
+const gAppLang = config.get('app_lang');
+const gIsAppLangSelectable = config.get('app_lang_user_selectable');
 const isUseResponseUrl = config.get('use_response_url');
-const isMenuAtTheEnd = config.get('menu_at_the_end');
+const gIsMenuAtTheEnd = config.get('menu_at_the_end');
 const botName = config.get('bot_name');
-const isShowHelpLink = config.get('show_help_link');
-const isShowCommandInfo = config.get('show_command_info');
-const isShowNumberInChoice = config.get('add_number_emoji_to_choice');
-const isShowNumberInChoiceBtn = config.get('add_number_emoji_to_choice_btn');
+const gIsCompactUI = config.get('compact_ui');
+const gIsShowDivider = config.get('show_divider');
+const gIsShowHelpLink = config.get('show_help_link');
+const gIsShowCommandInfo = config.get('show_command_info');
+const gIsShowNumberInChoice = config.get('add_number_emoji_to_choice');
+const gIsShowNumberInChoiceBtn = config.get('add_number_emoji_to_choice_btn');
+const gLogLevel = config.get('log_level');
+
+const validTeamOverrideConfigTF = ["app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","add_number_emoji_to_choice","add_number_emoji_to_choice_btn"];
 
 const client = new MongoClient(config.get('mongo_url'));
 let orgCol = null;
@@ -54,6 +62,13 @@ try {
   process.exit();
 }
 
+const createDBIndex = async () => {
+  orgCol.createIndex({"team.id": 1});
+  votesCol.createIndex({ channel: 1, ts: 1 });
+  closedCol.createIndex({ channel: 1, ts: 1 });
+  hiddenCol.createIndex({ channel: 1, ts: 1 });
+}
+
 let langCount = 0;
 globLang.sync( './language/*.json' ).forEach( function( file ) {
   let dash = file.split("/");
@@ -64,22 +79,27 @@ globLang.sync( './language/*.json' ).forEach( function( file ) {
       console.log("Lang file ["+lang+"]: "+file);
       let fileData = fileLang.readFileSync(file);
       langDict[lang] = JSON.parse(fileData.toString());
+      if(langDict[lang].hasOwnProperty('info_lang_name'))
+        langList[lang] = langDict[lang]['info_lang_name'];
+      else
+        langList[lang] = lang;
       langCount++;
     }
   }
 });
 console.log("Lang Count: "+langCount);
-console.log("Selected Lang: "+appLang);
+console.log("Selected Lang: "+gAppLang);
 if(!langDict.hasOwnProperty('en')) {
   console.error("language/en.json NOT FOUND!");
   throw new Error("language/en.json NOT FOUND!");
 }
-if(!langDict.hasOwnProperty(appLang)) {
-  console.error(`language/${appLang}.json NOT FOUND!`);
-  throw new Error(`language/${appLang}.json NOT FOUND!`);
+if(!langDict.hasOwnProperty(gAppLang)) {
+  console.error(`language/${gAppLang}.json NOT FOUND!`);
+  throw new Error(`language/${gAppLang}.json NOT FOUND!`);
 }
 
 const parameterizedString = (str,varArray) => {
+  if(str==undefined) str = `MissingStr`;
   let outputStr = str;
   for (let key in varArray) {
     if (varArray.hasOwnProperty(key)) {
@@ -104,12 +124,24 @@ const stri18n = (lang,key) => {
   }
 }
 
+const getTeamOverride  = async (mTeamId) => {
+    let ret = {};
+    try {
+        const team = await orgCol.findOne({ 'team.id': mTeamId });
+        if (team) {
+            if(team.hasOwnProperty("openPollConfig")) ret = team.openPollConfig;
+        }
+    }
+    catch (e) {
 
+    }
+    return ret;
+}
 const receiver = new ExpressReceiver({
   signingSecret: signing_secret,
   clientId: config.get('client_id'),
   clientSecret: config.get('client_secret'),
-  scopes: ['commands', 'chat:write.public', 'chat:write', 'groups:write'],
+  scopes: ['commands', 'chat:write.public', 'chat:write', 'groups:write','channels:read','groups:read','mpim:read','im:read'],
   stateSecret: config.get('state_secret'),
   endpoints: {
     events: '/slack/events',
@@ -119,6 +151,7 @@ const receiver = new ExpressReceiver({
   installerOptions: {
     installPath: '/slack/install',
     redirectUriPath: '/slack/oauth_redirect',
+    stateVerification: false,
     callbackOptions: {
       success: (installation, installOptions, req, res) => {
         res.redirect(config.get('oauth_success'));
@@ -167,7 +200,8 @@ const receiver = new ExpressReceiver({
       }
     },
   },
-  logLevel: LogLevel.DEBUG,
+  logLevel: gLogLevel,
+  //logLevel: LogLevel.DEBUG,
 });
 
 receiver.router.get('/ping', (req, res) => {
@@ -187,7 +221,7 @@ const sendMessageUsingUrl = async (url,newMessage) => {
 }
 
 const postChat = async (url,type,requestBody) => {
-  if(isUseResponseUrl)
+  if(isUseResponseUrl && url!=undefined && url!="")
   {
     delete requestBody['token'];
     delete requestBody['channel'];
@@ -245,11 +279,12 @@ const postChat = async (url,type,requestBody) => {
   }
 }
 
-const slackNumToEmoji = (seq) => {
+const slackNumToEmoji = (seq,userLang) => {
   let outText = "["+seq+"]";
-  if(langDict[appLang].hasOwnProperty('emoji_'+seq)) {
-    outText = langDict[appLang]['emoji_'+seq];
-  }
+  if(langDict.hasOwnProperty(userLang))
+    if(langDict[userLang].hasOwnProperty('emoji_'+seq))
+      outText = langDict[userLang]['emoji_'+seq];
+
   return outText;
 }
 
@@ -528,7 +563,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
   }
 });
 
-app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, say }) => {
+app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, say, respond }) => {
   await ack();
 
   let cmdBody = (command && command.text) ? command.text.trim() : null;
@@ -538,6 +573,26 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
   const channel = (command && command.channel_id) ? command.channel_id : null;
 
   const userId = (command && command.user_id) ? command.user_id : null;
+
+  const teamConfig = await getTeamOverride(body.team_id);
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+
+  let isMenuAtTheEnd = gIsMenuAtTheEnd;
+  let isCompactUI = gIsCompactUI;
+  let isShowDivider = gIsShowDivider;
+  let isShowHelpLink = gIsShowHelpLink;
+  let isShowCommandInfo = gIsShowCommandInfo;
+  let isShowNumberInChoice = gIsShowNumberInChoice;
+  let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
+
+  if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+  if(teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+  if(teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
+  if(teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
+  if(teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
+  if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
+  if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
 
   if (isHelp) {
     const blocks = [
@@ -621,6 +676,48 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           text: "```\n/"+slackCommand+" anonymous limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
         },
       },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Allow choices add by others*',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "```\n/"+slackCommand+" add-choice \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Change poll language for current poll only*',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "```\n/"+slackCommand+" lang th \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Config Open Poll for this Workspace*',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "```\n/"+slackCommand+" config```",
+        },
+      },
     ];
 
     let mRequestBody = {
@@ -638,6 +735,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     let question = null;
     const options = [];
 
+    let userLang = appLang;
     let isAnonymous = false;
     let isLimited = false;
     let limit = null;
@@ -659,6 +757,15 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           limit = parseInt(cmdBody.substring(0, cmdBody.indexOf(' ')));
           cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
         }
+      } else if (cmdBody.startsWith('lang')) {
+        fetchArgs = true;
+        cmdBody = cmdBody.substring(4).trim();
+        let inputLang = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+        if(langList.hasOwnProperty(inputLang)){
+          userLang = inputLang;
+        }
+
+        cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
       } else if (cmdBody.startsWith('hidden')) {
         fetchArgs = true;
         cmdBody = cmdBody.substring(6).trim();
@@ -667,6 +774,178 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         fetchArgs = true;
         cmdBody = cmdBody.substring(10).trim();
         isAllowUserAddChoice = true;
+      } else if (cmdBody.startsWith('config')) {
+        await respond(`/${slackCommand} ${command.text}`);
+        fetchArgs = true;
+        cmdBody = cmdBody.substring(6).trim();
+
+        let validWritePara = `\n/${slackCommand} config write app_lang [`;
+        let isFirstLang = true;
+        for (let key in langList) {
+          if(isFirstLang) isFirstLang = false;
+          else validWritePara += "/";
+          validWritePara += key;
+        }
+        validWritePara += "]";
+        for (const eachOverrideable of validTeamOverrideConfigTF) {
+          validWritePara += `\n/${slackCommand} config write ${eachOverrideable} [true/false]`;
+        }
+
+        let team = await orgCol.findOne({ 'team.id': body.team_id });
+        let validConfigUser = "";
+        if (team) {
+          if(team.hasOwnProperty("user"))
+            if(team.user.hasOwnProperty("id")) {
+              validConfigUser = team.user.id;
+            }
+        }
+        else {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: `Error while reading config`,
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+        }
+
+        if(body.user_id != validConfigUser) {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: stri18n(userLang,'err_only_installer'),
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+        }
+
+        if(cmdBody.startsWith("read")){
+
+
+          let configTxt = "Config: not found";
+          if (team) {
+            if(team.hasOwnProperty("openPollConfig")) {
+              configTxt = "Override found:\n```"+JSON.stringify(team.openPollConfig)+"```";
+
+            }
+            else {
+              configTxt = "No override: using server setting";
+            }
+          }
+
+
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: `${configTxt}`,
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+        } else if (cmdBody.startsWith("write")){
+          cmdBody = cmdBody.substring(5).trim();
+
+          let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+          let isWriteValid = false;
+
+          if(validTeamOverrideConfigTF.includes(inputPara)) {
+            cmdBody = cmdBody.substring(inputPara.length).trim();
+            isWriteValid = true;
+          }
+
+          if(inputPara=="app_lang") {
+            cmdBody = cmdBody.substring(8).trim();
+            isWriteValid = true;
+          }
+
+          if(isWriteValid) {
+            let inputVal = cmdBody.trim();
+            if(inputPara=="app_lang") {
+              if(!langList.hasOwnProperty(inputVal)){
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  //blocks: blocks,
+                  text: `Lang file [${inputVal}] not found`,
+                };
+                await postChat(body.response_url,'ephemeral',mRequestBody);
+                return;
+              }
+            } else {
+              if (cmdBody.startsWith("true")) {
+                inputVal = true;
+              } else if (cmdBody.startsWith("false")) {
+                inputVal = false;
+              }
+              else {
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  //blocks: blocks,
+                  text: `Usage: ${inputPara} [true/false]`,
+                };
+                await postChat(body.response_url,'ephemeral',mRequestBody);
+                return;
+              }
+          }
+          if(!team.hasOwnProperty("openPollConfig")) team.openPollConfig = {};
+          team.openPollConfig.isset = true;
+          team.openPollConfig[inputPara] = inputVal;
+          //console.log(team);
+          try {
+              await orgCol.replaceOne({'team.id': body.team_id}, team);
+          }
+          catch (e) {
+              console.error(e);
+              let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  //blocks: blocks,
+                  text: `Error while update [${inputPara}] to [${inputVal}]`,
+              };
+              await postChat(body.response_url,'ephemeral',mRequestBody);
+              return;
+
+          }
+
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: `[${inputPara}] is set to [${inputVal}] for this Team`,
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+
+        }
+        else {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: `[${inputPara}] is not valid config parameter or value is missing\nUsage: ${validWritePara}`,
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+        }
+
+
+
+        } else {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: `Usage:\n/${slackCommand} config read`+
+                  `\n${validWritePara}`
+            ,
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+        }
+
       }
     }
 
@@ -677,17 +956,32 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       limit = 1;
     }
 
-    const regexp = new RegExp(firstSep+'[^'+firstSep+'\\\\]*(?:\\\\[\S\s][^'+lastSep+'\\\\]*)*'+lastSep, 'g');
-    for (let option of cmdBody.match(regexp)) {
-      let opt = option.substring(1, option.length - 1);
-      if (question === null) {
-        question = opt;
-      } else {
-        options.push(opt);
+    try {
+      const regexp = new RegExp(firstSep+'[^'+firstSep+'\\\\]*(?:\\\\[\S\s][^'+lastSep+'\\\\]*)*'+lastSep, 'g');
+      for (let option of cmdBody.match(regexp)) {
+        let opt = option.substring(1, option.length - 1);
+        if (question === null) {
+          question = opt;
+        } else {
+          options.push(opt);
+        }
       }
     }
+    catch (e) {
+      let mRequestBody = {
+        token: context.botToken,
+        channel: channel,
+        //blocks: blocks,
+        text: stri18n(userLang,'err_process_command')
+        ,
+      };
+      await postChat(body.response_url,'ephemeral',mRequestBody);
+      return;
+    }
 
-    const blocks = createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userId, cmd);
+
+
+    const blocks = createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
 
     if (null === blocks) {
       return;
@@ -703,19 +997,21 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
   }
 });
 
-const modalBlockInput = {
-  type: 'input',
-  element: {
-    type: 'plain_text_input',
-    placeholder: {
-      type: 'plain_text',
-      text: stri18n(appLang,'modal_input_choice'),
-    },
-  },
-  label: {
-    type: 'plain_text',
-    text: ' ',
-  },
+const createModalBlockInput = (userLang)  => {
+    return {
+      type: 'input',
+      element: {
+        type: 'plain_text_input',
+        placeholder: {
+          type: 'plain_text',
+          text: stri18n(userLang,'modal_input_choice'),
+        },
+      },
+      label: {
+        type: 'plain_text',
+        text: ' ',
+      },
+  }
 };
 
 (async () => {
@@ -723,6 +1019,9 @@ const modalBlockInput = {
   await migrations.init();
   await migrations.migrate();
   console.log('End database migration.')
+
+  console.log('Check create DB index if not exist...');
+  await createDBIndex();
 
   await app.start(process.env.PORT || port);
 
@@ -746,14 +1045,16 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
     console.log('error');
     return;
   }
-
+  const teamConfig = await getTeamOverride(context.teamId);
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang
   let blocks = body.view.blocks;
   const hash = body.view.hash;
 
   let beginBlocks = blocks.slice(0, blocks.length - 1);
   let endBlocks = blocks.slice(-1);
 
-  let tempModalBlockInput = JSON.parse(JSON.stringify(modalBlockInput));
+  let tempModalBlockInput = JSON.parse(JSON.stringify(createModalBlockInput(appLang)));
   tempModalBlockInput.block_id = 'choice_'+(blocks.length-8);
 
   beginBlocks.push(tempModalBlockInput);
@@ -800,6 +1101,9 @@ app.action('btn_my_votes', async ({ ack, body, client, context }) => {
   const blocks = body.message.blocks;
   let votes = [];
   const userId = body.user.id;
+  const teamConfig = await getTeamOverride(body.team.id);
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
   for (const block of blocks) {
     if (
@@ -880,6 +1184,9 @@ app.action('btn_delete', async ({ action, ack, body, context }) => {
     console.log('error');
     return;
   }
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
   if (body.user.id !== action.value) {
     console.log('invalid user');
@@ -920,7 +1227,9 @@ app.action('btn_reveal', async ({ action, ack, body, context }) => {
     console.log('error');
     return;
   }
-
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   let value = JSON.parse(action.value);
 
   if (body.user.id !== value.user) {
@@ -949,7 +1258,8 @@ app.action('btn_reveal', async ({ action, ack, body, context }) => {
 app.action('btn_vote', async ({ action, ack, body, context }) => {
   await ack();
   let menuAtIndex = 0;
-  if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+
   if (
     !body
     || !action
@@ -964,7 +1274,6 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
     console.log('error');
     return;
   }
-
   const user_id = body.user.id;
   const message = body.message;
   let blocks = message.blocks;
@@ -972,6 +1281,32 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
   const channel = body.channel.id;
 
   let value = JSON.parse(action.value);
+
+  let userLang = null;
+  if(value.hasOwnProperty('user_lang'))
+    if(value.user_lang!="" && value.user_lang != null)
+      userLang = value.user_lang;
+
+  if(userLang==null)
+  {
+    userLang= gAppLang;
+    if(teamConfig.hasOwnProperty("app_lang")) userLang = teamConfig.app_lang;
+  }
+
+  let isMenuAtTheEnd = gIsMenuAtTheEnd;
+  if(value.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = value.menu_at_the_end;
+  else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+
+  let isCompactUI = gIsCompactUI;
+  if(value.hasOwnProperty("compact_ui")) isCompactUI = value.compact_ui;
+  else if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+
+  let isShowDivider = gIsShowDivider;
+  if(value.hasOwnProperty("show_divider")) isShowDivider = value.show_divider;
+  else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
+
+
+  if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
 
   if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
     mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
@@ -1004,13 +1339,12 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
             channel: body.channel.id,
             user: body.user.id,
             attachments: [],
-            text: stri18n(appLang,'err_change_vote_poll_closed'),
+            text: stri18n(userLang,'err_change_vote_poll_closed'),
         };
         await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
       }
 
-      console.debug(blocks);
       let poll = null;
       const data = await votesCol.findOne({ channel: channel, ts: message.ts });
       if (data === null) {
@@ -1027,7 +1361,6 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
             && b.accessory.hasOwnProperty('value')
           ) {
             const val = JSON.parse(b.accessory.value);
-            console.debug("Found val="+val);
             poll[val.id] = val.voters ? val.voters : [];
           }
         }
@@ -1052,7 +1385,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
 
       const isHidden = await getInfos(
         'hidden',
-        blocks, 
+        blocks,
         {
           team: message.team,
           channel,
@@ -1067,10 +1400,6 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
       let voters = value.voters ? value.voters : [];
 
       let removeVote = false;
-      console.log("poll");
-      console.log(poll);
-      console.log("value.id");
-      console.log(value.id);
 
       if (poll[value.id].includes(user_id)) {
         removeVote = true;
@@ -1096,7 +1425,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
             channel: channel,
             user: body.user.id,
             attachments: [],
-            text : parameterizedString(stri18n(appLang,'err_vote_over_limit'),{limit:value.limit}),
+            text : parameterizedString(stri18n(userLang,'err_vote_over_limit'),{limit:value.limit}),
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
@@ -1128,9 +1457,9 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
           let newVoters = '';
 
           if (isHidden) {
-            newVoters = stri18n(appLang,'info_wait_reveal');
+            newVoters = stri18n(userLang,'info_wait_reveal');
           } else if (poll[val.id].length === 0) {
-            newVoters = stri18n(appLang,'info_no_vote');
+            newVoters = stri18n(userLang,'info_no_vote');
           } else {
             newVoters = '';
             for (const voter of poll[val.id]) {
@@ -1148,9 +1477,17 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
           }
 
           blocks[i].accessory.value = JSON.stringify(val);
-          const nextI = ''+(parseInt(i)+1);
-          if (blocks[nextI].hasOwnProperty('elements')) {
-            blocks[nextI].elements[0].text = newVoters;
+          if(!isCompactUI) {
+            const nextI = ''+(parseInt(i)+1);
+            if (blocks[nextI].hasOwnProperty('elements')) {
+              blocks[nextI].elements[0].text = newVoters;
+            }
+          }
+          else {
+            let choiceNL = blocks[i].text.text.indexOf('\n');
+            if(choiceNL==-1) choiceNL = blocks[i].text.text.length;
+            const choiceText = blocks[i].text.text.substring(0,choiceNL);
+            blocks[i].text.text = `${choiceText}\n${newVoters}`;
           }
         }
       }
@@ -1162,14 +1499,15 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
           team: message.team,
           channel,
           ts: message.ts,
-        }
+        },
+        userLang
       );
       blocks[menuAtIndex].accessory.option_groups[0].options =
         await buildMenu(blocks, {
           team: message.team,
           channel,
           ts: message.ts,
-        });
+        },userLang,isMenuAtTheEnd);
 
       await votesCol.updateOne({
         channel,
@@ -1195,7 +1533,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
         channel: body.channel.id,
         user: body.user.id,
         attachments: [],
-        text: stri18n(appLang,'err_vote_exception'),
+        text: stri18n(userLang,'err_vote_exception'),
       };
       await postChat(body.response_url,'ephemeral',mRequestBody);
 
@@ -1208,7 +1546,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
       channel: body.channel.id,
       user: body.user.id,
       attachments: [],
-      text: stri18n(appLang,'err_vote_exception'),
+      text: stri18n(userLang,'err_vote_exception'),
     };
     await postChat(body.response_url,'ephemeral',mRequestBody);
 
@@ -1216,9 +1554,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
 });
 app.action('add_choice_after_post', async ({ ack, body, action, context,client }) => {
   await ack();
-  let newChoiceIndex = body.message.blocks.length-1;
-  if(isShowHelpLink||isShowCommandInfo) newChoiceIndex--;
-  if(isMenuAtTheEnd) newChoiceIndex--;
+
   if (
     !body
     || !action
@@ -1233,7 +1569,9 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
     console.log('error');
     return;
   }
-
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const user_id = body.user.id;
   const message = body.message;
   let blocks = message.blocks;
@@ -1241,6 +1579,23 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
   const channel = body.channel.id;
 
   const value = action.value.trim();
+
+  let isMenuAtTheEnd = gIsMenuAtTheEnd;
+  if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+  let isCompactUI = gIsCompactUI;
+  if(teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+  let isShowDivider = gIsShowDivider;
+  if(teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
+  let isShowHelpLink = gIsShowHelpLink;
+  if(teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
+  let isShowCommandInfo = gIsShowCommandInfo;
+  if(teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
+  let isShowNumberInChoice = gIsShowNumberInChoice;
+  if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
+  let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
+  if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
+
+  let userLang = appLang;
 
   if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
     mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
@@ -1259,7 +1614,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
   if (release) {
     try {
       //find next option id
-      let lastestOptionId = 0;
+      let lastestOptionId = -1;
       let lastestVoteBtnVal = [];
       for (const idx in body.message.blocks) {
         if (body.message.blocks[idx].hasOwnProperty('type') && body.message.blocks[idx].hasOwnProperty('accessory')) {
@@ -1273,11 +1628,23 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
                 if (voteBtnId > lastestOptionId) {
                   lastestOptionId = voteBtnId;
                   lastestVoteBtnVal = voteBtnVal;
+                  if(voteBtnVal.hasOwnProperty('user_lang'))
+                    if(voteBtnVal['user_lang']!="" && voteBtnVal['user_lang'] != null)
+                      userLang = voteBtnVal['user_lang'];
+
+                  if(voteBtnVal.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = voteBtnVal.menu_at_the_end;
+                  if(voteBtnVal.hasOwnProperty("compact_ui")) isCompactUI = voteBtnVal.compact_ui;
+                  if(voteBtnVal.hasOwnProperty("show_divider")) isShowDivider = voteBtnVal.show_divider;
+                  if(voteBtnVal.hasOwnProperty("show_help_link")) isShowHelpLink = voteBtnVal.show_help_link;
+                  if(voteBtnVal.hasOwnProperty("show_command_info")) isShowCommandInfo = voteBtnVal.show_command_info;
+                  if(voteBtnVal.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = voteBtnVal.add_number_emoji_to_choice;
+                  if(voteBtnVal.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = voteBtnVal.add_number_emoji_to_choice_btn;
+
                 }
 
                 let thisChoice = body.message.blocks[idx]['text']['text'].trim();
                 if (isShowNumberInChoice) {
-                  thisChoice = thisChoice.replace(slackNumToEmoji((voteBtnId + 1)) + " ", '');
+                  thisChoice = thisChoice.replace(slackNumToEmoji((voteBtnId + 1),userLang) + " ", '');
                 }
 
                 if (thisChoice == value) {
@@ -1286,7 +1653,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
                     channel: body.channel.id,
                     user: body.user.id,
                     attachments: [],
-                    text: parameterizedString(stri18n(appLang, 'err_duplicate_add_choice'), {text: value}),
+                    text: parameterizedString(stri18n(userLang, 'err_duplicate_add_choice'), {text: value}),
                   };
                   await postChat(body.response_url, 'ephemeral', mRequestBody);
                   return;
@@ -1299,25 +1666,36 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
         }
       }
       //update post
+      let newChoiceIndex = body.message.blocks.length-1;
+      if(isShowHelpLink||isShowCommandInfo) newChoiceIndex--;
+      if(isMenuAtTheEnd) newChoiceIndex--;
+
       const tempAddBlock = blocks[newChoiceIndex];
 
       lastestVoteBtnVal['id'] = (lastestOptionId + 1);
       lastestVoteBtnVal['voters'] = [];
+      blocks.splice(newChoiceIndex, 1,buildVoteBlock(lastestVoteBtnVal, value, isCompactUI, isShowDivider, isShowNumberInChoice, isShowNumberInChoiceBtn));
 
-      let block = {
-        type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: lastestVoteBtnVal['hidden'] ? stri18n(appLang,'info_wait_reveal') : stri18n(appLang,'info_no_vote'),
-          }
-        ],
-      };
-      blocks.splice(newChoiceIndex+1,0,block);
-
-      blocks.splice(newChoiceIndex+2,0,{
-        type: 'divider',
-      });
+      let divSpace = 0;
+      if(!isCompactUI) {
+        divSpace++;
+        let block = {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: lastestVoteBtnVal['hidden'] ? stri18n(userLang,'info_wait_reveal') : stri18n(userLang,'info_no_vote'),
+            }
+          ],
+        };
+        blocks.splice(newChoiceIndex + divSpace,0,block);
+      }
+      if(isShowDivider) {
+        divSpace++;
+        blocks.splice(newChoiceIndex + divSpace, 0, {
+          type: 'divider',
+        });
+      }
 
       let mRequestBody2 = {
         token: context.botToken,
@@ -1329,7 +1707,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
       await postChat(body.response_url, 'update', mRequestBody2);
 
       //re-add add-choice section
-      blocks.splice(newChoiceIndex+3, 0,tempAddBlock);
+      blocks.splice(newChoiceIndex+1+divSpace, 0,tempAddBlock);
 
       mRequestBody2 = {
         token: context.botToken,
@@ -1347,7 +1725,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
         channel: body.channel.id,
         user: body.user.id,
         attachments: [],
-        text: `An error occurred during add choice process. Please try again in few seconds.`,
+        text: stri18n(userLang,'err_add_choice_exception'),
       };
       await postChat(body.response_url, 'ephemeral', mRequestBody);
     } finally {
@@ -1366,14 +1744,32 @@ app.shortcut('open_modal_new', async ({ shortcut, ack, context, client }) => {
 
 async function createModal(context, client, trigger_id,response_url) {
   try {
-    let tempModalBlockInput = JSON.parse(JSON.stringify(modalBlockInput));
+    const teamConfig = await getTeamOverride(context.teamId);
+    let appLang= gAppLang;
+    if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+    let tempModalBlockInput = JSON.parse(JSON.stringify(createModalBlockInput(appLang)));
     tempModalBlockInput.block_id = 'choice_0';
-
+    let isMenuAtTheEnd = gIsMenuAtTheEnd;
+    if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+    let isShowHelpLink = gIsShowHelpLink;
+    if(teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
+    let isShowCommandInfo = gIsShowCommandInfo;
+    if(teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
+    let isShowNumberInChoice = gIsShowNumberInChoice;
+    if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
+    let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
+    if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
     const privateMetadata = {
+      user_lang: appLang,
       anonymous: false,
       limited: false,
       hidden: false,
       user_add_choice: false,
+      menu_at_the_end: isMenuAtTheEnd,
+      show_help_link: isShowHelpLink,
+      show_command_info: isShowCommandInfo,
+      add_number_emoji_to_choice: isShowNumberInChoice,
+      add_number_emoji_to_choice_btn: isShowNumberInChoiceBtn,
       response_url: response_url,
       channel: null,
     };
@@ -1433,6 +1829,7 @@ async function createModal(context, client, trigger_id,response_url) {
         },
         {
           type: 'context',
+          block_id: 'ch_select_help',
           elements: [
             {
               type: 'mrkdwn',
@@ -1443,6 +1840,52 @@ async function createModal(context, client, trigger_id,response_url) {
       ]);
     }
 
+    let isAppLangSelectable = gIsAppLangSelectable;
+    if(teamConfig.hasOwnProperty("app_lang_user_selectable"))
+      isAppLangSelectable = teamConfig.app_lang_user_selectable;
+    if(isAppLangSelectable)
+    {
+      let allOptions = [];
+      let defaultOption = {};
+      for (const langKey in langList) {
+        const thisLangOp = {
+          "text": {
+            "type": "plain_text",
+            "text": langList[langKey],
+            "emoji": true
+          },
+          "value": langKey
+        };
+        if(appLang == langKey)
+        {
+          defaultOption = thisLangOp;
+        }
+        allOptions.push(thisLangOp);
+      }
+
+      blocks = blocks.concat([
+        {
+          "type": "input",
+          "element": {
+            "type": "static_select",
+            "placeholder": {
+              "type": "plain_text",
+              "text": stri18n(appLang,'info_lang_select_hint'),
+              "emoji": true
+            },
+            "options": allOptions,
+            "initial_option" : defaultOption,
+            //"action_id": "modal_select_lang"
+          },
+          "label": {
+            "type": "plain_text",
+            "text": stri18n(appLang,'info_lang_select_label'),
+            "emoji": true
+          },
+          block_id: 'user_lang',
+        }
+      ]);
+    }
 
     blocks = blocks.concat([
       {
@@ -1570,6 +2013,7 @@ async function createModal(context, client, trigger_id,response_url) {
       },
     ]);
 
+    //console.debug(JSON.stringify(blocks));
     const result = await client.views.open({
       token: context.botToken,
       trigger_id: trigger_id,
@@ -1606,10 +2050,63 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
   ) {
     return;
   }
-
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const privateMetadata = JSON.parse(body.view.private_metadata);
   privateMetadata.channel = action.selected_channel || action.selected_conversation;
 
+  //console.debug(action);
+  //console.debug("CH:"+privateMetadata.channel);
+  let isChFound = true;
+  let isChErr = false;
+  try {
+    const result = await client.conversations.info({
+      token: context.botToken,
+      hash: body.view.hash,
+      channel: privateMetadata.channel
+     });
+  }
+  catch (e) {
+    if(e.message.includes('channel_not_found'))
+    {
+      isChFound = false;
+    }
+    else
+    {
+      //ignote it!
+      console.debug("Error on client.conversations.info (maybe user click too fast) :"+e.message);
+      isChErr = true;
+    }
+
+  }
+
+  let blocks = body.view.blocks;
+  for (const i in blocks) {
+    let b = blocks[i];
+    if(b.hasOwnProperty('block_id')){
+      //test next element
+      let nextIndex = parseInt(i)+1;
+      if(blocks.length > nextIndex  ){
+        //console.log("Block" +nextIndex +"IS:");
+        //console.log(blocks[nextIndex]);
+        if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type=="context"){
+          //console.log("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
+          if(isChErr) {
+            blocks[nextIndex].elements[0].text = stri18n(appLang,'err_poll_ch_exception');
+          }
+          else if (isChFound) {
+            blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_bot_in_ch');
+          }
+          else {
+            blocks[nextIndex].elements[0].text = parameterizedString(langDict[appLang]['modal_bot_not_in_ch'],{slack_command:slackCommand,bot_name:botName})
+          }
+          break;
+        }
+      }
+    }
+  }
+  //console.debug(blocks);
   const view = {
     type: body.view.type,
     private_metadata: JSON.stringify(privateMetadata),
@@ -1700,12 +2197,15 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   ) {
     return;
   }
-
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const privateMetadata = JSON.parse(view.private_metadata);
   const userId = body.user.id;
 
   const state = view.state;
   let question = null;
+  let userLang = appLang;
   const options = [];
   let limit = 1;
 
@@ -1714,6 +2214,10 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
       const option = state.values[optionName][Object.keys(state.values[optionName])[0]];
       if ('question' === optionName) {
         question = option.value;
+      } else if ('user_lang' === optionName) {
+        if(langList.hasOwnProperty(option.selected_option.value)){
+          userLang = option.selected_option.value;
+        }
       } else if ('limit' === optionName) {
         limit = parseInt(option.value, 10);
       } else if (optionName.startsWith('choice_')) {
@@ -1739,7 +2243,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   }
 
   if(isNaN(limit)) limit = 1;
-
+  privateMetadata.user_lang = userLang;
   const isAnonymous = privateMetadata.anonymous;
   const isLimited = privateMetadata.limited;
   const isHidden = privateMetadata.hidden;
@@ -1754,9 +2258,31 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
     return;
   }
 
-  const cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice);
+  const cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang);
 
-  const blocks = createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userId, cmd);
+  let isMenuAtTheEnd = gIsMenuAtTheEnd;
+  let isCompactUI = gIsCompactUI;
+  let isShowDivider = gIsShowDivider;
+  let isShowHelpLink = gIsShowHelpLink;
+  let isShowCommandInfo = gIsShowCommandInfo;
+  let isShowNumberInChoice = gIsShowNumberInChoice;
+  let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
+  if(privateMetadata.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = privateMetadata.menu_at_the_end;
+  else if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+  if(privateMetadata.hasOwnProperty("compact_ui")) isCompactUI = privateMetadata.compact_ui;
+  else if(teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+  if(privateMetadata.hasOwnProperty("show_divider")) isShowDivider = privateMetadata.show_divider;
+  else if(teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
+  if(privateMetadata.hasOwnProperty("show_help_link")) isShowHelpLink = privateMetadata.show_help_link;
+  else if(teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
+  if(privateMetadata.hasOwnProperty("show_command_info")) isShowCommandInfo = privateMetadata.show_command_info;
+  else if(teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
+  if(privateMetadata.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = privateMetadata.add_number_emoji_to_choice;
+  else if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
+  if(privateMetadata.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = privateMetadata.add_number_emoji_to_choice_btn;
+  else if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
+
+  const blocks = createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
 
   let mRequestBody = {
     token: context.botToken,
@@ -1767,7 +2293,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   await postChat(response_url,'post',mRequestBody);
 });
 
-function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice) {
+function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang) {
   let cmd = `/${slackCommand}`;
   if (isAnonymous) {
     cmd += ` anonymous`
@@ -1781,8 +2307,11 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   if (isHidden) {
     cmd += ` hidden`
   }
-  if (isHidden) {
+  if (isAllowUserAddChoice) {
     cmd += ` add-choice`
+  }
+  if (userLang!=null) {
+    cmd += ` lang ${userLang}`
   }
 
   question = question.replace(/"/g, "\\\"");
@@ -1796,7 +2325,7 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   return cmd;
 }
 
-function createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userId, cmd) {
+function createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd) {
   if (
     !question
     || !options
@@ -1805,50 +2334,52 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
     return null;
   }
 
-  const blocks = [];
+  //const userLang = appLang;
 
+  const blocks = [];
+  //WARN: there is a limit on how long value can be!
   const staticSelectElements = [{
     label: {
       type: 'plain_text',
-      text: stri18n(appLang,'menu_poll_action'),
+      text: stri18n(userLang,'menu_poll_action'),
     },
     options: [{
       text: {
         type: 'plain_text',
-        text: isHidden ? stri18n(appLang,'menu_reveal_vote') : stri18n(appLang,'menu_hide_vote'),
+        text: isHidden ? stri18n(userLang,'menu_reveal_vote') : stri18n(userLang,'menu_hide_vote'),
       },
       value:
-        JSON.stringify({action: 'btn_reveal', revealed: !isHidden, user: userId}),
+        JSON.stringify({action: 'btn_reveal', revealed: !isHidden, user: userId, user_lang: userLang, z_mat: isMenuAtTheEnd, z_cp:isCompactUI, z_div:isShowDivider,  z_help: isShowHelpLink, z_cmd: isShowCommandInfo}),
     }, {
       text: {
         type: 'plain_text',
-        text: stri18n(appLang,'menu_all_user_vote'),
+        text: stri18n(userLang,'menu_all_user_vote'),
       },
-      value: JSON.stringify({action: 'btn_users_votes', user: userId}),
+      value: JSON.stringify({action: 'btn_users_votes', user: userId, user_lang: userLang}),
     }, {
       text: {
         type: 'plain_text',
-        text: stri18n(appLang,'menu_delete_poll'),
+        text: stri18n(userLang,'menu_delete_poll'),
       },
-      value: JSON.stringify({action: 'btn_delete', user: userId}),
+      value: JSON.stringify({action: 'btn_delete', user: userId, user_lang: userLang}),
     }, {
       text: {
         type: 'plain_text',
-        text: stri18n(appLang,'menu_close_poll'),
+        text: stri18n(userLang,'menu_close_poll'),
       },
-      value: JSON.stringify({action: 'btn_close', user: userId}),
+      value: JSON.stringify({action: 'btn_close', user: userId, user_lang: userLang, z_mat: isMenuAtTheEnd, z_cp:isCompactUI, z_div:isShowDivider, z_help: isShowHelpLink, z_cmd: isShowCommandInfo}),
     }],
   }, {
     label: {
       type: 'plain_text',
-      text: stri18n(appLang,'menu_user_action'),
+      text: stri18n(userLang,'menu_user_action'),
     },
     options: [{
       text: {
         type: 'plain_text',
-        text: stri18n(appLang,'menu_user_self_vote'),
+        text: stri18n(userLang,'menu_user_self_vote'),
       },
-      value: JSON.stringify({action: 'btn_my_votes', user: userId}),
+      value: JSON.stringify({action: 'btn_my_votes', user: userId, user_lang: userLang }),
     }],
   }];
 
@@ -1856,12 +2387,12 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
     staticSelectElements.push({
       label: {
         type: 'plain_text',
-        text: stri18n(appLang,'menu_support'),
+        text: stri18n(userLang,'menu_support'),
       },
       options: [{
         text: {
           type: 'plain_text',
-          text: stri18n(appLang,'menu_love_open_poll'),
+          text: stri18n(userLang,'menu_love_open_poll'),
         },
         value: JSON.stringify({action: 'btn_love_open_poll', user: userId}),
       }],
@@ -1900,37 +2431,42 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
     if (isAnonymous) {
       elements.push({
         type: 'mrkdwn',
-        text: stri18n(appLang,'info_anonymous'),
+        text: stri18n(userLang,'info_anonymous'),
       });
     }
     if (isLimited) {
       elements.push({
         type: 'mrkdwn',
-        text: parameterizedString(stri18n(appLang,'info_limited'),{limit:limit})+stri18n(appLang,'info_s'),
+        text: parameterizedString(stri18n(userLang,'info_limited'),{limit:limit})+stri18n(userLang,'info_s'),
       });
     }
     if (isHidden) {
       elements.push({
         type: 'mrkdwn',
-        text: stri18n(appLang,'info_hidden'),
+        text: stri18n(userLang,'info_hidden'),
       });
     }
   }
   elements.push({
     type: 'mrkdwn',
-    text: parameterizedString(stri18n(appLang,'info_by'),{user_id:userId}),
+    text: parameterizedString(stri18n(userLang,'info_by'),{user_id:userId}),
   });
   blocks.push({
     type: 'context',
     elements: elements,
   });
-  if(stri18n(appLang,'info_addon')!=="")
+  let addInfo = stri18n(userLang,'info_addon');
+  if(isAnonymous) {
+    if(addInfo!=="") addInfo += "\n";
+    addInfo+=stri18n(userLang,'info_anonymous_notice')
+  }
+  if(addInfo!=="")
   {
     blocks.push({
       type: 'context',
       elements: [{
         type: 'mrkdwn',
-        text: stri18n(appLang,'info_addon'),
+        text: addInfo,
       }],
     });
   }
@@ -1939,11 +2475,19 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
   });
 
   let button_value = {
+    user_lang: userLang,
     anonymous: isAnonymous,
     limited: isLimited,
     limit: limit,
     hidden: isHidden,
     user_add_choice: isAllowUserAddChoice,
+    menu_at_the_end: isMenuAtTheEnd,
+    compact_ui: isCompactUI,
+    show_divider: isShowDivider,
+    show_help_link: isShowHelpLink,
+    show_command_info: isShowCommandInfo,
+    add_number_emoji_to_choice: isShowNumberInChoice,
+    add_number_emoji_to_choice_btn: isShowNumberInChoiceBtn,
     voters: [],
     id: null,
   };
@@ -1953,24 +2497,25 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
     let btn_value = JSON.parse(JSON.stringify(button_value));
     btn_value.id = i;
 
-    blocks.push(buildVoteBlock(btn_value, option));
+    blocks.push(buildVoteBlock(btn_value, option, isCompactUI, isShowDivider, isShowNumberInChoice, isShowNumberInChoiceBtn));
 
-    let block = {
-      type: 'context',
-      elements: [
-        {
-          type: 'mrkdwn',
-          text: btn_value['hidden'] ? stri18n(appLang,'info_wait_reveal') : stri18n(appLang,'info_no_vote'),
-        }
-      ],
-    };
-    blocks.push(block);
-
-
-    blocks.push({
-      type: 'divider',
-    });
-
+    if(!isCompactUI) {
+      let block = {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: btn_value['hidden'] ? stri18n(userLang,'info_wait_reveal') : stri18n(userLang,'info_no_vote'),
+          }
+        ],
+      };
+      blocks.push(block);
+    }
+    if(isShowDivider) {
+      blocks.push({
+        type: 'divider',
+      });
+    }
 
   }
 
@@ -1989,12 +2534,12 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
         },
         "placeholder": {
           "type": "plain_text",
-          "text": stri18n(appLang,'info_others_add_choice_hint')
+          "text": stri18n(userLang,'info_others_add_choice_hint')
         }
       },
       "label": {
         "type": "plain_text",
-        "text": stri18n(appLang,'info_others_add_choice'),
+        "text": stri18n(userLang,'info_others_add_choice'),
         "emoji": true
       }
     });
@@ -2009,11 +2554,11 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
         elements: [
           {
             type: 'mrkdwn',
-            text: `<${helpLink}|`+stri18n(appLang,'info_need_help')+`>`,
+            text: `<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`,
           },
           {
             type: 'mrkdwn',
-            text: stri18n(appLang,'info_need_help')+' '+cmd,
+            text: stri18n(userLang,'info_need_help')+' '+cmd,
           },
         ],
       });
@@ -2025,7 +2570,7 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
         elements: [
           {
             type: 'mrkdwn',
-            text: `<${helpLink}|`+stri18n(appLang,'info_need_help')+`>`,
+            text: `<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`,
           }
         ],
       });
@@ -2055,7 +2600,7 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
       },
       accessory: {
         type: 'static_select',
-        placeholder: { type: 'plain_text', text: stri18n(appLang,'menu_text') },
+        placeholder: { type: 'plain_text', text: stri18n(userLang,'menu_text') },
         action_id: 'static_select_menu',
         option_groups: staticSelectElements,
       },
@@ -2116,7 +2661,7 @@ async function supportAction(body, client, context) {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: ':heart: You love the app ?',
+      text: stri18n(gAppLang,'menu_support_love_app'),
     },
   },
   { type: 'divider' },
@@ -2124,16 +2669,16 @@ async function supportAction(body, client, context) {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: ':technologist: Contribute on it',
+      text: stri18n(gAppLang,'menu_support_contribute'),
     },
     accessory: {
       type: 'button',
       text: {
         type: 'plain_text',
-        text: 'Open GitLab',
+        text: stri18n(gAppLang,'menu_support_source'),
       },
       style: 'primary',
-      url: 'https://gitlab.com/KazuAlex/openpollslack',
+      url: helpLink,
       action_id: 'ignore_me',
     }
   },
@@ -2141,15 +2686,15 @@ async function supportAction(body, client, context) {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: ':coffee: Buy me a coffee to help me to maintain servers or just thanks me',
+      text: stri18n(gAppLang,'menu_support_me'),
     },
     accessory: {
       type: 'button',
       text: {
         type: 'plain_text',
-        text: 'Buy a coffee',
+        text: stri18n(gAppLang,'menu_support_me_buy_coffee'),
       },
-      url: 'https://www.buymeacoffee.com/kazualex',
+      url: supportUrl,
       action_id: 'ignore_me',
     }
   }];
@@ -2159,7 +2704,7 @@ async function supportAction(body, client, context) {
     channel: body.channel.id,
     user: body.user.id,
     blocks,
-    text: 'Support Open Poll',
+    text: stri18n(gAppLang,'menu_support_open_poll'),
   };
   await postChat(body.response_url,'ephemeral',mRequestBody);
 
@@ -2172,10 +2717,13 @@ async function myVotes(body, client, context) {
   ) {
     return;
   }
-
+  const teamConfig = await getTeamOverride( (body.team_id?body.team_id:body.team.id) );
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const blocks = body.message.blocks;
   let votes = [];
   const userId = body.user.id;
+  let userLang = appLang;
 
   for (const block of blocks) {
     if (
@@ -2190,6 +2738,11 @@ async function myVotes(body, client, context) {
       continue;
     }
     const value = JSON.parse(block.accessory.value);
+
+
+    if(value.hasOwnProperty('user_lang'))
+      if(value.user_lang!="" && value.user_lang != null)
+        userLang = value.user_lang;
 
     if (value.voters.includes(userId)) {
       votes.push({
@@ -2210,7 +2763,7 @@ async function myVotes(body, client, context) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: stri18n(appLang,'info_not_vote_yet'),
+        text: stri18n(userLang,'info_not_vote_yet'),
       },
     });
   } else {
@@ -2225,11 +2778,11 @@ async function myVotes(body, client, context) {
         type: 'modal',
         title: {
           type: 'plain_text',
-          text: stri18n(appLang,'info_your_vote'),
+          text: stri18n(userLang,'info_your_vote'),
         },
         close: {
           type: 'plain_text',
-          text: stri18n(appLang,'info_close'),
+          text: stri18n(userLang,'info_close'),
         },
         blocks: votes,
       }
@@ -2254,7 +2807,9 @@ async function usersVotes(body, client, context, value) {
     console.log('error');
     return;
   }
-
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
     console.log('invalid user');
     let mRequestBody = {
@@ -2309,6 +2864,7 @@ async function usersVotes(body, client, context, value) {
   } catch(e) {
   }
 
+  let userLang = appLang;
   for (const block of blocks) {
     if (
       block.hasOwnProperty('accessory')
@@ -2316,6 +2872,12 @@ async function usersVotes(body, client, context, value) {
     ) {
       const value = JSON.parse(block.accessory.value);
       const voters = poll ? (poll[value.id] || []) : [];
+
+
+      if(value.hasOwnProperty('user_lang'))
+        if(value.user_lang!="" && value.user_lang != null)
+          userLang = value.user_lang;
+
       votes.push({
         type: 'divider',
       });
@@ -2331,7 +2893,7 @@ async function usersVotes(body, client, context, value) {
         elements: [{
           type: 'mrkdwn',
           text: !voters.length
-            ? stri18n(appLang,'info_no_vote')
+            ? stri18n(userLang,'info_no_vote')
             : voters.map(el => {
                 return `<@${el}>`;
               }).join(', '),
@@ -2348,11 +2910,11 @@ async function usersVotes(body, client, context, value) {
         type: 'modal',
         title: {
           type: 'plain_text',
-          text: stri18n(appLang,'info_all_user_vote'),
+          text: stri18n(userLang,'info_all_user_vote'),
         },
         close: {
           type: 'plain_text',
-          text: stri18n(appLang,'info_close'),
+          text: stri18n(userLang,'info_close'),
         },
         blocks: votes,
       },
@@ -2365,6 +2927,20 @@ async function usersVotes(body, client, context, value) {
 async function revealOrHideVotes(body, context, value) {
 
   let menuAtIndex = 0;
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+  let isMenuAtTheEnd = gIsMenuAtTheEnd;
+  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = value.z_mat;
+  else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+
+  let isCompactUI = gIsCompactUI;
+  if(value.hasOwnProperty("z_cp")) isCompactUI = value.z_cp;
+  else if (teamConfig.hasOwnProperty("show_divider")) isCompactUI = teamConfig.compact_ui;
+
+  let isShowDivider = gIsShowDivider;
+  if(value.hasOwnProperty("z_div")) isShowDivider = value.z_div;
+  else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
   if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
   if (
     !body
@@ -2435,6 +3011,8 @@ async function revealOrHideVotes(body, context, value) {
     }
   } while (!release && countTry < 3);
 
+  let userLang = appLang;
+  let isUserLangFound = false;
   if (release) {
     try {
       let poll = null;
@@ -2467,6 +3045,20 @@ async function revealOrHideVotes(body, context, value) {
         });
       } else {
         poll = data.votes;
+      }
+
+      for (const b of blocks) {
+        if(isUserLangFound) break;
+        if (
+            b.hasOwnProperty('accessory')
+            && b.accessory.hasOwnProperty('value')
+        ) {
+          const val = JSON.parse(b.accessory.value);
+          if(val.hasOwnProperty('user_lang')) {
+            isUserLangFound = true;
+            userLang = val.user_lang;
+          }
+        }
       }
 
       const infos = await getInfos(
@@ -2502,10 +3094,10 @@ async function revealOrHideVotes(body, context, value) {
           let newVoters = '';
 
           if (isHidden) {
-            newVoters = stri18n(appLang,'info_wait_reveal');
+            newVoters = stri18n(userLang,'info_wait_reveal');
           } else {
             if (poll[val.id].length === 0) {
-              newVoters = stri18n(appLang,'info_no_vote');
+              newVoters = stri18n(userLang,'info_no_vote');
             } else {
               newVoters = '';
               for (const voter of poll[val.id]) {
@@ -2520,9 +3112,17 @@ async function revealOrHideVotes(body, context, value) {
           }
 
           blocks[i].accessory.value = JSON.stringify(val);
-          const nextI = ''+(parseInt(i)+1);
-          if (blocks[nextI].hasOwnProperty('elements')) {
-            blocks[nextI].elements[0].text = newVoters;
+          if(!isCompactUI) {
+            const nextI = ''+(parseInt(i)+1);
+            if (blocks[nextI].hasOwnProperty('elements')) {
+              blocks[nextI].elements[0].text = newVoters;
+            }
+          }
+          else {
+            let choiceNL = blocks[i].text.text.indexOf('\n');
+            if(choiceNL==-1) choiceNL = blocks[i].text.text.length;
+            const choiceText = blocks[i].text.text.substring(0,choiceNL);
+            blocks[i].text.text = `${choiceText}\n${newVoters}`;
           }
         }
       }
@@ -2532,13 +3132,13 @@ async function revealOrHideVotes(body, context, value) {
           team: message.team,
           channel,
           ts: message.ts,
-        });
+        },userLang,isMenuAtTheEnd);
       } else if (blocks[menuAtIndex].accessory.option_groups) {
         blocks[menuAtIndex].accessory.option_groups[0].options = await buildMenu(blocks, {
           team: message.team,
           channel,
           ts: message.ts,
-        });
+        },userLang,isMenuAtTheEnd);
       }
 
       const infosIndex = blocks.findIndex(el => el.type === 'context' && el.elements)
@@ -2548,7 +3148,8 @@ async function revealOrHideVotes(body, context, value) {
           team: message.team,
           channel,
           ts: message.ts,
-        }
+        },
+        userLang
       );
 
       let mRequestBody = {
@@ -2566,7 +3167,7 @@ async function revealOrHideVotes(body, context, value) {
         channel: body.channel.id,
         user: body.user.id,
         attachments: [],
-        text: `An error occurred during ${isHidden ? 'hide' : 'reveal'} process. Please try again in few seconds.`,
+        text: (isHidden ? stri18n(userLang,'err_poll_hide_exception'): stri18n(userLang,'err_poll_reveal_exception')),
       };
       await postChat(body.response_url,'ephemeral',mRequestBody);
     } finally {
@@ -2578,7 +3179,7 @@ async function revealOrHideVotes(body, context, value) {
       channel: body.channel.id,
       user: body.user.id,
       attachments: [],
-      text: stri18n(appLang,'err_vote_exception'),
+      text: stri18n(userLang,'err_vote_exception'),
     };
     await postChat(body.response_url,'ephemeral',mRequestBody);
   }
@@ -2598,7 +3199,9 @@ async function deletePoll(body, context, value) {
     console.log('error');
     return;
   }
-
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
     console.log('invalid user');
     let mRequestBody = {
@@ -2622,6 +3225,14 @@ async function deletePoll(body, context, value) {
 
 async function closePoll(body, client, context, value) {
   let menuAtIndex = 0;
+  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+
+  let isMenuAtTheEnd = gIsMenuAtTheEnd;
+  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = value.z_mat;
+  else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+
   if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
   if (
     !body
@@ -2693,6 +3304,7 @@ async function closePoll(body, client, context, value) {
         $set: { closed: !isClosed }
       });
 
+      let userLang = appLang;
       if (isClosed) {
         for (const i in blocks) {
           const block = blocks[i];
@@ -2706,6 +3318,11 @@ async function closePoll(body, client, context, value) {
             value.closed = false;
 
             blocks[i].accessory.value = JSON.stringify(value);
+
+            if(value.hasOwnProperty('user_lang'))
+              if(value.user_lang!="" && value.user_lang != null)
+                userLang = value.user_lang;
+
           }
         }
       } else {
@@ -2721,6 +3338,10 @@ async function closePoll(body, client, context, value) {
             value.closed = true;
 
             blocks[i].accessory.value = JSON.stringify(value);
+
+            if(value.hasOwnProperty('user_lang'))
+              if(value.user_lang!="" && value.user_lang != null)
+                userLang = value.user_lang;
           }
         }
       }
@@ -2732,7 +3353,7 @@ async function closePoll(body, client, context, value) {
             team: message.team,
             channel,
             ts: message.ts,
-          });
+          },userLang,isMenuAtTheEnd);
       }
 
       const infosIndex =
@@ -2743,7 +3364,8 @@ async function closePoll(body, client, context, value) {
           team: message.team,
           channel,
           ts: message.ts,
-        }
+        },
+        userLang
       );
 
       let mRequestBody = {
@@ -2761,7 +3383,7 @@ async function closePoll(body, client, context, value) {
         channel: body.channel.id,
         user: body.user.id,
         attachments: [],
-        text: stri18n(appLang,'err_close_other'),
+        text: stri18n(userLang,'err_close_other'),
       };
       await postChat(body.response_url,'ephemeral',mRequestBody);
     } finally {
@@ -2773,7 +3395,7 @@ async function closePoll(body, client, context, value) {
       channel: body.channel.id,
       user: body.user.id,
       attachments: [],
-      text: stri18n(appLang,'err_close_other'),
+      text: stri18n(userLang,'err_close_other'),
     };
     await postChat(body.response_url,'ephemeral',mRequestBody);
   }
@@ -2904,7 +3526,8 @@ async function getInfos(infos, blocks, pollInfos) {
   return result;
 }
 
-async function buildInfosBlocks(blocks, pollInfos) {
+async function buildInfosBlocks(blocks, pollInfos,userLang) {
+  if(userLang == null) userLang = gAppLang;
   const infosIndex =
     blocks.findIndex(el => el.type === 'context' && el.elements);
   const infosBlocks = [];
@@ -2913,45 +3536,46 @@ async function buildInfosBlocks(blocks, pollInfos) {
   if (infos.anonymous) {
     infosBlocks.push({
       type: 'mrkdwn',
-      text: stri18n(appLang,'info_anonymous'),
+      text: stri18n(userLang,'info_anonymous'),
     });
   }
   if (infos.limited) {
     infosBlocks.push({
       type: 'mrkdwn',
-      text : parameterizedString(stri18n(appLang,'info_limited'),{limit:infos.limit})+stri18n(appLang,'info_s'),
+      text : parameterizedString(stri18n(userLang,'info_limited'),{limit:infos.limit})+stri18n(userLang,'info_s'),
     });
   }
   if (infos.hidden) {
     infosBlocks.push({
       type: 'mrkdwn',
-      text: stri18n(appLang,'info_hidden'),
+      text: stri18n(userLang,'info_hidden'),
     });
   }
   if (infos.closed) {
     infosBlocks.push({
       type: 'mrkdwn',
-      text: stri18n(appLang,'info_closed'),
+      text: stri18n(userLang,'info_closed'),
     });
   }
   infosBlocks.push(blocks[infosIndex].elements.pop());
   return infosBlocks;
 }
 
-async function buildMenu(blocks, pollInfos) {
+async function buildMenu(blocks, pollInfos,userLang,isMenuAtTheEnd) {
   let menuAtIndex = 0;
   if(isMenuAtTheEnd) menuAtIndex = blocks.length-1;
+  if(userLang == null) userLang = gAppLang;
   const infos = await getInfos(['closed', 'hidden'], blocks, pollInfos);
 
   if (blocks[menuAtIndex].accessory.option_groups) {
     return blocks[menuAtIndex].accessory.option_groups[0].options.map(el => {
       const value = JSON.parse(el.value);
       if (value && 'btn_close' === value.action) {
-        el.text.text = infos['closed'] ? stri18n(appLang,'menu_reopen_poll') : stri18n(appLang,'menu_close_poll');
+        el.text.text = infos['closed'] ? stri18n(userLang,'menu_reopen_poll') : stri18n(userLang,'menu_close_poll');
         value.closed = !value.closed;
         el.value = JSON.stringify(value);
       } else if (value && 'btn_reveal' === value.action) {
-        el.text.text = infos['hidden'] ? stri18n(appLang,'menu_reveal_vote') : stri18n(appLang,'menu_hide_vote');
+        el.text.text = infos['hidden'] ? stri18n(userLang,'menu_reveal_vote') : stri18n(userLang,'menu_hide_vote');
         value.revealed = !value.closed;
         el.value = JSON.stringify(value);
       }
@@ -2962,7 +3586,7 @@ async function buildMenu(blocks, pollInfos) {
     return blocks[menuAtIndex].accessory.options.map((el) => {
       const value = JSON.parse(el.value);
       if (value && 'btn_reveal' === value.action) {
-        el.text.text = infos['hidden'] ? stri18n(appLang,'menu_reveal_vote') : stri18n(appLang,'menu_hide_vote');
+        el.text.text = infos['hidden'] ? stri18n(userLang,'menu_reveal_vote') : stri18n(userLang,'menu_hide_vote');
         value.revealed = !value.closed;
         el.value = JSON.stringify(value);
       }
@@ -2974,17 +3598,23 @@ async function buildMenu(blocks, pollInfos) {
   return null;
 }
 
-function buildVoteBlock(btn_value, option_text) {
+function buildVoteBlock(btn_value, option_text, isCompactUI, isShowDivider, isShowNumberInChoice, isShowNumberInChoiceBtn) {
   let emojiPrefix = "";
   let emojiBthPostfix = "";
   let voteId = parseInt(btn_value.id);
-  if(isShowNumberInChoice) emojiPrefix = slackNumToEmoji(voteId+1)+" ";
-  if(isShowNumberInChoiceBtn) emojiBthPostfix = " "+slackNumToEmoji(voteId+1);
+  let userLang = gAppLang;
+  if(btn_value.hasOwnProperty('user_lang'))
+    if(btn_value['user_lang']!="" && btn_value['user_lang'] != null)
+    userLang = btn_value['user_lang'];
+  if(isShowNumberInChoice) emojiPrefix = slackNumToEmoji(voteId+1,userLang)+" ";
+  if(isShowNumberInChoiceBtn) emojiBthPostfix = " "+slackNumToEmoji(voteId+1,userLang);
+  let compactVoteTxt = "";
+  if(isCompactUI) compactVoteTxt = "\n" + (btn_value['hidden'] ? stri18n(userLang,'info_wait_reveal') : stri18n(userLang,'info_no_vote')) ;
   let block = {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: emojiPrefix+""+option_text,
+      text: emojiPrefix+""+option_text+""+compactVoteTxt,
     },
     accessory: {
       type: 'button',
@@ -2992,7 +3622,7 @@ function buildVoteBlock(btn_value, option_text) {
       text: {
         type: 'plain_text',
         emoji: true,
-        text: stri18n(appLang,'btn_vote')+""+emojiBthPostfix,
+        text: stri18n(userLang,'btn_vote')+""+emojiBthPostfix,
       },
       value: JSON.stringify(btn_value),
     },
