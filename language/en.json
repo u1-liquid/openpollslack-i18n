@@ -3,6 +3,7 @@
   "info_lang_select_hint": "Select Language",
   "info_lang_select_label": "Poll Language:",
   "info_anonymous": ":shushing_face: Anonymous poll",
+  "info_anonymous_notice": "NOTE: Poll creator still can see who voted which options",
   "info_limited": ":warning: Limited to `{{limit}}` vote",
   "info_s": "s",
   "info_hidden": ":ninja: Votes are hidden",
@@ -74,6 +75,7 @@
   "err_delete_other": "You can't delete poll from another user.",
   "err_reveal_other": "You can't reveal poll from another user.",
   "err_see_all_vote_other": "You can't see all users votes.",
+  "err_see_all_vote_true_anonymous": "You can't see all users votes. Because poll is `Anonymous` and `True Anonymous` mode is ENABLE",
   "err_poll_too_old": "Your poll is too old. Please create new one.",
   "err_vote_over_limit": "You can't vote anymore. Remove a vote to choose another option. (limit =`{{limit}}`)",
   "err_vote_exception": "An error occurred during vote processing. Please try again in few seconds.",
@@ -85,6 +87,7 @@
   "err_poll_ch_exception": ":warning::warning:\nCan not chect if you are able to create poll in this channel or not.\nYou may try to re-select again in few seconds.",
   "err_duplicate_add_choice": "[{{text}}] already exists in choice",
   "err_process_command": "Error while processing command please check and try again...",
+  "err_invalid_command": "Invalid command or parts of command (except question and choice) may contains *bold* ~strike~ _italics_ or `code`",
   "err_only_installer": "Only user that install this app can use this command",
   "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock.",
   "emoji_1": ":one:",
@@ -96,5 +99,7 @@
   "emoji_7": ":seven:",
   "emoji_8": ":eight:",
   "emoji_9": ":nine:",
-  "emoji_10": ":keycap_ten:"
+  "emoji_10": ":keycap_ten:",
+  "emoji_11": ":one::one:",
+  "emoji_12": ":one::two:"
 }

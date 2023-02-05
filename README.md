@@ -1,37 +1,44 @@
 
 # About this fork 
 
-I have make some change to make it more customizable such as 
+I have make some change to make it more customizable such as:
 - Allow choices add by others
-- UI Language
-- UI Order (Show/Hide Element you don't want to make it cleaner)
+- True Anonymous Vote (Poller can't see users votes if this mode is ON) : Default ON
+- Customizeable UI (Order, Show/Hide Element you don't want to make it cleaner)
+- UI Language, Multiple language support
+- Separate configuation for each Slack team
+- Better error handling that may crash the server
+
 
 (Please see detail below)
 
 ### If I just want to use it without self-host?
-You can use "Add to slack" button [on site](https://siamhos.com/openpollplus/index_plus.html)
+You can use "Add to slack" button [on this site](https://siamhos.com/openpollplus/index_plus.html)
 
-PLEASE NOTE: Link above will run lastest code on my devlopment server, you can use it for free, but it may contain bugs or may down for mantanance or database may be wiped at any time. 
+PLEASE NOTE: Link above will run lastest code on my devlopment server, you can use it for free, but it may contain bugs or may down for mantanance without any notice, If you found any bugs please feel free to report. 
 
 After add to slack please use `/poll config` to config what options you want to enable/disable on your Slack team.
 
+If you didn't use any of these Feature you might want to use original App here [GitLab](https://gitlab.com/openpollslack/openpollslack).
 
 ## Additional server config (config/default.json)
 - `app_lang` for translation (Please put language file in language folder), Translate some text to Thai (th-ภาษาไทย)
 - `app_lang_user_selectable` if set to `true`; Let user who create poll (Via Modal) select language of poll UI 
 - `use_response_url` if set to `true`; app will respond to request using `response_url` instead of using `app.client.chat.post`
   so user will be able to create poll in private channel without adding bot to that channel (using /command or Modal that called by /command, but not via shortcut), But it might get timeout if user not response after Modal was created (click create poll) within slack time limit(30 minutes).
-- `menu_at_the_end` if set to `true`; Rearrange Menu to the end of poll so no more big menu btn between question and answer when using smartphone
+- `menu_at_the_end` if set to `true`; Rearrange Menu to the end of poll so no more big menu button between question and answer when using smartphone
 - `add_number_emoji_to_choice` and `add_number_emoji_to_choice_btn`  if set to `true`; Number emoji (customizeable) will show in the vote option text / button
 - `compact_ui` if set to `true`; Choice text will compact to voter name
 - `show_divider` if set to `false`; Poll will be more compact (divider between choice will be removed)
 - `show_help_link` if set to `false`; help link will be removed from poll
 - `show_command_info` if set to `false`; command that use to create poll will be removed
+- `true_anonymous` if set to `true`; Poller will no longer see who voted which options if poll is anonymous, If this mode is disabled; `info_anonymous_notice` will show to let users know that poller can still see there votes
+- `log_level` valid options are: `debug` `info` `warn` `error`
 
 ## Team config (Override Server config)
 
-If some of your team would like to using different config than what is on default.json you can use `/poll config` 
-- this command only work on user who install app to Slack only.
+If some of your team would like to using different config than what is on default.json you can use `/poll config` .
+- this command only work on user who install app to Slack only
 - If app was re-add to workspace all Override config will be removed
 
 Usage:
@@ -44,6 +51,7 @@ Usage:
 /poll config write show_divider [true/false]
 /poll config write show_help_link [true/false]
 /poll config write show_command_info [true/false]
+/poll config write true_anonymous [true/false]
 /poll config write add_number_emoji_to_choice [true/false]
 /poll config write add_number_emoji_to_choice_btn [true/false]
 ```
@@ -62,11 +70,15 @@ Usage:
 - UI Config
 
   ![Alt text](./assets/UI-compare.png?raw=true "UI-compare")
+  ![Alt text](./assets/UI-compare-mobile.png?raw=true "UI-compare-mobile")
+  ![Alt text](./assets/UI-menu-location.png?raw=true "UI-menu-location")
 - Emoji On/Off
 
  ![Alt text](./assets/UI-emoji.png?raw=true "UI-Emoji")
 
+- You also can add notice to user when anonymous was used (since creator still can see their votes) by add text you want in `info_anonymous_notice` of language file 
 
+ ![Alt text](./assets/poll-anonymous-note.png?raw=true "poll-anonymous-note")
 ## Additional Permissions
 
 `channels:read`,`groups:read`,`mpim:read`,`im:read` : to check if bot in selected channel (if not using `response_url`)
@@ -154,12 +166,13 @@ Remember the four freedoms of the GPL :
 /poll lang th "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
   
-For both question and choices, feel free to use slack's emoji, `*bold*` `~strike~` `_italics_` and `` `code` ``  
+For both question and choices, feel free to use Slack's emoji, `*bold*` `~strike~` `_italics_` and `` `code` ``  
 
 ## Self hosted installation
 
-[self_host.md](self_host.md)
-
+- [self_host.md](self_host.md)
+- [webpage.md](webpage.md)
+- [apache-ssl.md](apache-ssl.md)
 ## Support me
 
 To support or thank me, you can contact me. I would be happy to provide you my PayPal address.
