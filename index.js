@@ -1,7 +1,7 @@
 const { App, ExpressReceiver, LogLevel } = require('@slack/bolt');
 const config = require('config');
 
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 
 const { Migrations } = require('./utils/migrations');
 
@@ -41,6 +41,7 @@ let orgCol = null;
 let votesCol = null;
 let closedCol = null;
 let hiddenCol = null;
+let pollCol = null;
 
 let migrations = null;
 
@@ -55,6 +56,7 @@ try {
   votesCol = db.collection('votes');
   closedCol = db.collection('closed');
   hiddenCol = db.collection('hidden');
+  pollCol = db.collection('poll_data');
 
   migrations = new Migrations(db);
 } catch (e) {
@@ -68,6 +70,7 @@ const createDBIndex = async () => {
   votesCol.createIndex({ channel: 1, ts: 1 });
   closedCol.createIndex({ channel: 1, ts: 1 });
   hiddenCol.createIndex({ channel: 1, ts: 1 });
+  pollCol.createIndex({ channel: 1, ts: 1 });
 }
 
 let langCount = 0;
@@ -214,7 +217,7 @@ const app = new App({
 });
 
 const sendMessageUsingUrl = async (url,newMessage) => {
-  await fetch(url, {
+  return await fetch(url, {
     method: 'POST',
     body: JSON.stringify(newMessage),
     headers: {'Content-Type': 'application/json'}
@@ -982,9 +985,8 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       return;
     }
 
+    const blocks = await createPollView(channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
 
-
-    const blocks = createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
 
     if (null === blocks) {
       return;
@@ -1583,6 +1585,8 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
 
   const value = action.value.trim();
 
+  let poll_id = null;
+
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
   if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
   let isCompactUI = gIsCompactUI;
@@ -1636,7 +1640,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
                   if(voteBtnVal.hasOwnProperty('user_lang'))
                     if(voteBtnVal['user_lang']!="" && voteBtnVal['user_lang'] != null)
                       userLang = voteBtnVal['user_lang'];
-
+                  if(voteBtnVal.hasOwnProperty("poll_id")) poll_id = voteBtnVal.poll_id;
                   if(voteBtnVal.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = voteBtnVal.menu_at_the_end;
                   if(voteBtnVal.hasOwnProperty("compact_ui")) isCompactUI = voteBtnVal.compact_ui;
                   if(voteBtnVal.hasOwnProperty("show_divider")) isShowDivider = voteBtnVal.show_divider;
@@ -1723,6 +1727,14 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
         text: message.text
       };
       await postChat(body.response_url, 'update', mRequestBody2);
+
+      //update polldata
+      if(poll_id!=null) {
+        pollCol.updateOne(
+            { _id: new ObjectId(poll_id) },
+            { $push: { options: value}  }
+        );
+      }
 
     } catch (e) {
       console.error(e);
@@ -2294,7 +2306,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   if(privateMetadata.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = privateMetadata.add_number_emoji_to_choice_btn;
   else if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
 
-  const blocks = createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
+  const blocks = await createPollView(channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
 
   let mRequestBody = {
     token: context.botToken,
@@ -2337,7 +2349,7 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   return cmd;
 }
 
-function createPollView(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd) {
+async function createPollView(channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd) {
   if (
     !question
     || !options
@@ -2505,6 +2517,24 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
     id: null,
   };
 
+  const pollData = {
+    team: null,
+    channel,
+    ts: null,
+    user_id: userId,
+    cmd: cmd,
+    question: question,
+    options: options,
+    para: button_value
+  };
+
+  await pollCol.insertOne(pollData);
+
+  const pollID = pollData._id;
+  console.debug("New Poll:"+pollID)
+
+  button_value.poll_id = pollID;
+
   for (let i in options) {
     let option = options[i];
     let btn_value = JSON.parse(JSON.stringify(button_value));
@@ -2571,7 +2601,7 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
           },
           {
             type: 'mrkdwn',
-            text: stri18n(userLang,'info_need_help')+' '+cmd,
+            text: stri18n(userLang,'info_command_source')+' '+cmd,
           },
         ],
       });
@@ -2597,7 +2627,7 @@ function createPollView(question, options, isAnonymous, isLimited, limit, isHidd
       elements: [
         {
           type: 'mrkdwn',
-          text: ':information_source: '+cmd,
+          text: stri18n(userLang,'info_command_source')+' '+cmd,
         },
       ],
     });
