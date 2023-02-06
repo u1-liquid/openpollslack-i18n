@@ -32,9 +32,10 @@ const gIsShowCommandInfo = config.get('show_command_info');
 const gTrueAnonymous = config.get('true_anonymous');
 const gIsShowNumberInChoice = config.get('add_number_emoji_to_choice');
 const gIsShowNumberInChoiceBtn = config.get('add_number_emoji_to_choice_btn');
+const gIsDeleteDataOnRequest = config.get('delete_data_on_poll_delete');
 const gLogLevel = config.get('log_level');
 
-const validTeamOverrideConfigTF = ["app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn"];
+const validTeamOverrideConfigTF = ["app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete"];
 
 const client = new MongoClient(config.get('mongo_url'));
 let orgCol = null;
@@ -2358,7 +2359,42 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
     return null;
   }
 
-  //const userLang = appLang;
+  let button_value = {
+    user_lang: userLang,
+    anonymous: isAnonymous,
+    limited: isLimited,
+    limit: limit,
+    hidden: isHidden,
+    user_add_choice: isAllowUserAddChoice,
+    menu_at_the_end: isMenuAtTheEnd,
+    compact_ui: isCompactUI,
+    show_divider: isShowDivider,
+    show_help_link: isShowHelpLink,
+    show_command_info: isShowCommandInfo,
+    true_anonymous: isTrueAnonymous,
+    add_number_emoji_to_choice: isShowNumberInChoice,
+    add_number_emoji_to_choice_btn: isShowNumberInChoiceBtn,
+    voters: [],
+    id: null,
+  };
+
+  const pollData = {
+    team: null,
+    channel,
+    ts: null,
+    user_id: userId,
+    cmd: cmd,
+    question: question,
+    options: options,
+    para: button_value
+  };
+
+  await pollCol.insertOne(pollData);
+
+  const pollID = pollData._id;
+  console.debug("New Poll:"+pollID)
+
+  button_value.poll_id = pollID;
 
   const blocks = [];
   //WARN: there is a limit on how long value can be!
@@ -2385,7 +2421,7 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
         type: 'plain_text',
         text: stri18n(userLang,'menu_delete_poll'),
       },
-      value: JSON.stringify({action: 'btn_delete', user: userId, user_lang: userLang}),
+      value: JSON.stringify({action: 'btn_delete', p_id:pollID, user: userId, user_lang: userLang}),
     }, {
       text: {
         type: 'plain_text',
@@ -2403,7 +2439,7 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
         type: 'plain_text',
         text: stri18n(userLang,'menu_user_self_vote'),
       },
-      value: JSON.stringify({action: 'btn_my_votes', user: userId, user_lang: userLang }),
+      value: JSON.stringify({action: 'btn_my_votes', p_id:pollID, user: userId, user_lang: userLang }),
     }],
   }];
 
@@ -2498,42 +2534,6 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
     type: 'divider',
   });
 
-  let button_value = {
-    user_lang: userLang,
-    anonymous: isAnonymous,
-    limited: isLimited,
-    limit: limit,
-    hidden: isHidden,
-    user_add_choice: isAllowUserAddChoice,
-    menu_at_the_end: isMenuAtTheEnd,
-    compact_ui: isCompactUI,
-    show_divider: isShowDivider,
-    show_help_link: isShowHelpLink,
-    show_command_info: isShowCommandInfo,
-    true_anonymous: isTrueAnonymous,
-    add_number_emoji_to_choice: isShowNumberInChoice,
-    add_number_emoji_to_choice_btn: isShowNumberInChoiceBtn,
-    voters: [],
-    id: null,
-  };
-
-  const pollData = {
-    team: null,
-    channel,
-    ts: null,
-    user_id: userId,
-    cmd: cmd,
-    question: question,
-    options: options,
-    para: button_value
-  };
-
-  await pollCol.insertOne(pollData);
-
-  const pollID = pollData._id;
-  console.debug("New Poll:"+pollID)
-
-  button_value.poll_id = pollID;
 
   for (let i in options) {
     let option = options[i];
@@ -3280,6 +3280,25 @@ async function deletePoll(body, context, value) {
     ts: body.message.ts,
   };
   await postChat(body.response_url,'delete',mRequestBody);
+
+  if(gIsDeleteDataOnRequest) {
+    if(value.hasOwnProperty('p_id')) {
+      //delete from database
+      pollCol.deleteOne(
+          { _id: new ObjectId(value.p_id) }
+      );
+      votesCol.deleteOne(
+          { channel: body.channel.id, ts: body.message.ts }
+      );
+      closedCol.deleteOne(
+          { channel: body.channel.id, ts: body.message.ts }
+      );
+      hiddenCol.deleteOne(
+          { channel: body.channel.id, ts: body.message.ts }
+      );
+    }
+  }
+
 }
 
 async function closePoll(body, client, context, value) {

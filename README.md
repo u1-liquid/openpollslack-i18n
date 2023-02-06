@@ -33,6 +33,7 @@ If you didn't use any of these Feature you might want to use original App here [
 - `show_help_link` if set to `false`; help link will be removed from poll
 - `show_command_info` if set to `false`; command that use to create poll will be removed
 - `true_anonymous` if set to `true`; Poller will no longer see who voted which options if poll is anonymous, If this mode is disabled; `info_anonymous_notice` will show to let users know that poller can still see there votes
+- `delete_data_on_poll_delete` if set to `true`; When poller request to delete the poll, all data in database that refer to that poll will be deleted. If you want to disable it please make sure if compliance with your policy.
 - `log_level` valid options are: `debug` `info` `warn` `error`
 
 ## Team config (Override Server config)
@@ -54,6 +55,7 @@ Usage:
 /poll config write true_anonymous [true/false]
 /poll config write add_number_emoji_to_choice [true/false]
 /poll config write add_number_emoji_to_choice_btn [true/false]
+/poll config write delete_data_on_poll_delete [true/false]
 ```
 
 ## Example

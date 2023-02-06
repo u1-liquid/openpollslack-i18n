@@ -23,5 +23,6 @@
   "support_url": "https://www.buymeacoffee.com/kazualex",
   "mongo_url": "mongodb://localhost:27017",
   "mongo_db_name": "open_poll",
+  "delete_data_on_poll_delete": true,
   "log_level": "debug"
 }
