@@ -129,6 +129,31 @@ const stri18n = (lang,key) => {
   }
 }
 
+function getTeamOrEnterpriseId (body) {
+  body = JSON.parse(JSON.stringify(body));
+  //console.debug(body);
+  if(body.hasOwnProperty('isEnterpriseInstall')) {
+    if(body.isEnterpriseInstall=='false' || body.isEnterpriseInstall == false) return body.teamId;
+    else return body.enterpriseId;
+  }
+  else if(body.hasOwnProperty('is_enterprise_install')) {
+    if(body.is_enterprise_install=='false' || body.is_enterprise_install == false ) {
+      if(body.hasOwnProperty('team_id')) return body.team_id;
+      else return body.team.id;
+    }
+    else {
+      if(body.hasOwnProperty('enterprise_id')) return body.enterprise_id;
+      return body.enterprise.id;
+    }
+  }
+  else
+  {
+    if(body.hasOwnProperty('enterprise_id')) return body.enterprise_id;
+    else if(body.hasOwnProperty('team_id')) return body.team_id;
+  }
+  return null;
+}
+
 const getTeamOverride  = async (mTeamId) => {
     let ret = {};
     try {
@@ -163,6 +188,8 @@ const receiver = new ExpressReceiver({
       },
       failure: (error, installOptions , req, res) => {
         res.redirect(config.get('oauth_failure'));
+        //console.debug(req);
+        console.debug(res);
       },
     },
   },
@@ -184,25 +211,36 @@ const receiver = new ExpressReceiver({
         await orgCol.insertOne(installation);
       }
 
-      return installation.team.id;
+      return mTeamId;
     },
     fetchInstallation: async (installQuery) => {
       let mTeamId = "";
+      //console.debug(installQuery);
       if (installQuery.isEnterpriseInstall && installQuery.enterpriseId !== undefined) {
         // org wide app installation lookup
         mTeamId = installQuery.enterpriseId;
+
+        try {
+          return await orgCol.findOne({ 'enterprise.id': mTeamId });
+        } catch (e) {
+          console.error(e)
+          throw new Error('No matching authorizations');
+        }
+
       }
       if (installQuery.teamId !== undefined) {
         // single team app installation lookup
         mTeamId = installQuery.teamId;
+
+        try {
+          return await orgCol.findOne({ 'team.id': mTeamId });
+        } catch (e) {
+          console.error(e)
+          throw new Error('No matching authorizations');
+        }
       }
 
-      try {
-        return await orgCol.findOne({ 'team.id': mTeamId });
-      } catch (e) {
-        console.error(e)
-        throw new Error('No matching authorizations');
-      }
+
     },
   },
   logLevel: gLogLevel,
@@ -579,7 +617,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
 
   const userId = (command && command.user_id) ? command.user_id : null;
 
-  const teamConfig = await getTeamOverride(body.team_id);
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
@@ -726,7 +764,6 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         },
       },
     ];
-
     let mRequestBody = {
       token: context.botToken,
       channel: channel,
@@ -798,7 +835,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           validWritePara += `\n/${slackCommand} config write ${eachOverrideable} [true/false]`;
         }
 
-        let team = await orgCol.findOne({ 'team.id': body.team_id });
+        let team = await orgCol.findOne({ 'team.id': getTeamOrEnterpriseId(body) });
         let validConfigUser = "";
         if (team) {
           if(team.hasOwnProperty("user"))
@@ -902,7 +939,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           team.openPollConfig[inputPara] = inputVal;
           //console.log(team);
           try {
-              await orgCol.replaceOne({'team.id': body.team_id}, team);
+              await orgCol.replaceOne({'team.id': getTeamOrEnterpriseId(body)}, team);
           }
           catch (e) {
               console.error(e);
@@ -1051,7 +1088,7 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
     console.log('error');
     return;
   }
-  const teamConfig = await getTeamOverride(context.teamId);
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(context));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang
   let blocks = body.view.blocks;
@@ -1107,7 +1144,7 @@ app.action('btn_my_votes', async ({ ack, body, client, context }) => {
   const blocks = body.message.blocks;
   let votes = [];
   const userId = body.user.id;
-  const teamConfig = await getTeamOverride(body.team.id);
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
@@ -1190,12 +1227,12 @@ app.action('btn_delete', async ({ action, ack, body, context }) => {
     console.log('error');
     return;
   }
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
   if (body.user.id !== action.value) {
-    console.log('invalid user');
+    console.log('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -1233,13 +1270,13 @@ app.action('btn_reveal', async ({ action, ack, body, context }) => {
     console.log('error');
     return;
   }
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   let value = JSON.parse(action.value);
 
   if (body.user.id !== value.user) {
-    console.log('invalid user');
+    console.log('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -1264,7 +1301,7 @@ app.action('btn_reveal', async ({ action, ack, body, context }) => {
 app.action('btn_vote', async ({ action, ack, body, context }) => {
   await ack();
   let menuAtIndex = 0;
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
 
   if (
     !body
@@ -1575,7 +1612,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
     console.log('error');
     return;
   }
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const user_id = body.user.id;
@@ -1763,7 +1800,7 @@ app.shortcut('open_modal_new', async ({ shortcut, ack, context, client }) => {
 
 async function createModal(context, client, trigger_id,response_url) {
   try {
-    const teamConfig = await getTeamOverride(context.teamId);
+    const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(context));
     let appLang= gAppLang;
     if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
     let tempModalBlockInput = JSON.parse(JSON.stringify(createModalBlockInput(appLang)));
@@ -2072,7 +2109,7 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
   ) {
     return;
   }
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const privateMetadata = JSON.parse(body.view.private_metadata);
@@ -2219,7 +2256,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   ) {
     return;
   }
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const privateMetadata = JSON.parse(view.private_metadata);
@@ -2760,7 +2797,7 @@ async function myVotes(body, client, context) {
   ) {
     return;
   }
-  const teamConfig = await getTeamOverride( (body.team_id?body.team_id:body.team.id) );
+  const teamConfig = await getTeamOverride( getTeamOrEnterpriseId(body) );
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const blocks = body.message.blocks;
@@ -2850,11 +2887,11 @@ async function usersVotes(body, client, context, value) {
     console.log('error');
     return;
   }
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
-    console.log('invalid user');
+    console.log('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -2986,7 +3023,7 @@ async function usersVotes(body, client, context, value) {
 async function revealOrHideVotes(body, context, value) {
 
   let menuAtIndex = 0;
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
@@ -3023,7 +3060,7 @@ async function revealOrHideVotes(body, context, value) {
   }
 
   if (body.user.id !== value.user) {
-    console.log('invalid user');
+    console.log('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -3258,11 +3295,11 @@ async function deletePoll(body, context, value) {
     console.log('error');
     return;
   }
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
-    console.log('invalid user');
+    console.log('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -3303,7 +3340,7 @@ async function deletePoll(body, context, value) {
 
 async function closePoll(body, client, context, value) {
   let menuAtIndex = 0;
-  const teamConfig = await getTeamOverride((body.team_id?body.team_id:body.team.id));
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
@@ -3328,7 +3365,7 @@ async function closePoll(body, client, context, value) {
   }
 
   if (body.user.id !== value.user) {
-    console.log('invalid user');
+    console.log('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
           channel: body.channel.id,
