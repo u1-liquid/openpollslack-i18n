@@ -57,7 +57,7 @@ If some of your team would like to using different config than what is on defaul
 Usage:
 ```
 /poll config read
-/poll config write app_lang [en/th/(or language file)]
+/poll config write app_lang [zh_tw/zh_cn/th/ru/kr/jp/fr/es/en/de/(or language file)]
 /poll config write app_lang_user_selectable [true/false]
 /poll config write menu_at_the_end [true/false]
 /poll config write create_via_cmd_only [true/false]
