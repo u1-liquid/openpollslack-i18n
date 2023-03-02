@@ -1,4 +1,15 @@
 
+# What is this app?
+Open Poll+ is free and open source app for create a poll in Slack.\
+Open Poll+ est une application gratuite et open source pour créer des sondages dans Slack.\
+Open Poll+ ist eine kostenlose und Open-Source-App zum Erstellen von Umfragen in Slack.\
+Open Poll+ es una aplicación gratuita y de código abierto para crear encuestas en Slack.\
+Open Poll+は、Slackで投票を作成するための無料かつオープンソースのアプリです。\
+Open Poll+는 Slack에서 설문 조사를 작성하기 위한 무료 및 오픈 소스 앱입니다.\
+Open Poll+ - бесплатное приложение с открытым исходным кодом для создания опросов в Slack.\
+Open Poll+ هو تطبيق مجاني ومفتوح المصدر لإنشاء استطلاعات في Slack.\
+Open Poll+是用于在Slack中创建调查的免费开源应用程序。
+
 # About this fork 
 
 I have make some change to make it more customizable such as:
@@ -6,10 +17,9 @@ I have make some change to make it more customizable such as:
 - True Anonymous Vote (Poller can't see users votes if this mode is ON) : Default ON
 - Support Slack's Enterprise Grid, Slack Connect
 - Customizeable UI (Order, Show/Hide Element you don't want to make it cleaner)
-- UI Language, Multiple language support
+- UI Language, Multiple language support (please feel free to report any mistranslation)
 - Separate configuation for each Slack team
 - Better error handling that may crash the server
-
 
 (Please see detail below)
 

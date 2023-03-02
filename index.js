@@ -94,6 +94,8 @@ globSync( './language/*.json' ).forEach( function( file ) {
       langCount++;
     }
 });
+
+
 console.log("Lang Count: "+langCount);
 console.log("Selected Lang: "+gAppLang);
 if(!langDict.hasOwnProperty('en')) {
@@ -837,6 +839,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           validWritePara += `\n/${slackCommand} config write ${eachOverrideable} [true/false]`;
         }
 
+        validWritePara += `\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
         let team = await orgCol.findOne({ 'team.id': getTeamOrEnterpriseId(body) });
         let validConfigUser = "";
         if (team) {
@@ -1961,6 +1964,16 @@ async function createModal(context, client, trigger_id,response_url) {
         }
         allOptions.push(thisLangOp);
       }
+
+      allOptions.sort((a, b) => {
+        if (a.text.text < b.text.text) {
+          return -1;
+        } else if (a.text.text > b.text.text) {
+          return 1;
+        } else {
+          return 0;
+        }
+      });
 
       blocks = blocks.concat([
         {
