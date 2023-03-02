@@ -67,6 +67,7 @@
   "modal_ch_response_url_hint": ":warning: Please DO NOT change text above :warning:\nPoll will be posted to current channel.",
   "modal_ch_warn": ":warning: Some of channels may not be visible to the bot. This may result by impossibility to create the poll.",
   "modal_ch_warn_with_response_url": ":warning: Some of channels may not be visible to the bot. This may result by impossibility to create the poll. \nOr just type /{{slack_command}} in the channel that you want to post poll so @{{bot_name}} can create poll for you in any channel",
+  "modal_ch_via_cmd_only": ":warning: Please type type /{{slack_command}} in the channel that you want to post poll then press enter.",
   "modal_bot_not_in_ch": ":x::x::x:\nBot not in selected channel please close this dialog and add @{{bot_name}} to that channel first \nor just type /{{slack_command}} in channel that you want to create this poll\n:x::x::x:",
   "modal_bot_in_ch": ":white_check_mark: You can create poll in this channel",
   "err_change_vote_poll_closed": "You can't change your votes on closed poll.",

@@ -27,6 +27,7 @@ If you didn't use any of these Feature you might want to use original App here [
 - `app_lang_user_selectable` if set to `true`; Let user who create poll (Via Modal) select language of poll UI 
 - `use_response_url` if set to `true`; app will respond to request using `response_url` instead of using `app.client.chat.post`
   so user will be able to create poll in private channel without adding bot to that channel (using /command or Modal that called by /command, but not via shortcut), But it might get timeout if user not response after Modal was created (click create poll) within slack time limit(30 minutes).
+- `create_via_cmd_only`  if set to `true` (available only if `use_response_url` is enabled) ; User will NOT able to create Poll using Shortcut; it will show `modal_ch_via_cmd_only` string to ask user to create poll via /command instead.
 - `menu_at_the_end` if set to `true`; Rearrange Menu to the end of poll so no more big menu button between question and answer when using smartphone
 - `add_number_emoji_to_choice` and `add_number_emoji_to_choice_btn`  if set to `true`; Number emoji (customizeable) will show in the vote option text / button
 - `compact_ui` if set to `true`; Choice text will compact to voter name
@@ -49,6 +50,7 @@ Usage:
 /poll config write app_lang [en/th/(or language file)]
 /poll config write app_lang_user_selectable [true/false]
 /poll config write menu_at_the_end [true/false]
+/poll config write create_via_cmd_only [true/false]
 /poll config write compact_ui [true/false]
 /poll config write show_divider [true/false]
 /poll config write show_help_link [true/false]

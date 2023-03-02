@@ -43,6 +43,7 @@ Inside the `config` folder, you have a `default.json.dist`. Copy it into `config
 - `bot_name` : for refering bot name in some help text
 - `use_response_url` : if set to `true`; app will respond to request using `response_url` instead of using `app.client.chat.post`
   so user will be able to create poll in private channel without adding bot to that channel (using /command or Modal that called by /command, but not via shortcut), But it might get timeout if user not response after Modal was created (click create poll) within slack time limit(30 minutes).
+- `create_via_cmd_only`  if set to `true` (available only if `use_response_url` is enabled) ; User will NOT able to create Poll using Shortcut; it will show `modal_ch_via_cmd_only` string to ask user to create poll via /command instead.
 - `menu_at_the_end` : if set to `true`; Rearrange Menu to the end of poll so no more big menu btn between question and answer when using smartphone
 - `add_number_emoji_to_choice` and `add_number_emoji_to_choice_btn` : if set to `true`; Number emoji (customizeable) will show in the vote option text / button
 - `compact_ui` if set to `true`; Choice text will compact to voter name

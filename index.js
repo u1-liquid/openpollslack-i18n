@@ -23,6 +23,7 @@ const supportUrl = config.get('support_url');
 const gAppLang = config.get('app_lang');
 const gIsAppLangSelectable = config.get('app_lang_user_selectable');
 const isUseResponseUrl = config.get('use_response_url');
+const gIsViaCmdOnly = config.get('create_via_cmd_only');
 const gIsMenuAtTheEnd = config.get('menu_at_the_end');
 const botName = config.get('bot_name');
 const gIsCompactUI = config.get('compact_ui');
@@ -35,7 +36,7 @@ const gIsShowNumberInChoiceBtn = config.get('add_number_emoji_to_choice_btn');
 const gIsDeleteDataOnRequest = config.get('delete_data_on_poll_delete');
 const gLogLevel = config.get('log_level');
 
-const validTeamOverrideConfigTF = ["app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete"];
+const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete"];
 
 const client = new MongoClient(config.get('mongo_url'));
 let orgCol = null;
@@ -1817,6 +1818,9 @@ async function createModal(context, client, trigger_id,response_url) {
     if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
     let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
     if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
+    let isViaCmdOnly = gIsViaCmdOnly;
+    if(teamConfig.hasOwnProperty("create_via_cmd_only")) isViaCmdOnly = teamConfig.create_via_cmd_only;
+
     const privateMetadata = {
       user_lang: appLang,
       anonymous: false,
@@ -1832,6 +1836,41 @@ async function createModal(context, client, trigger_id,response_url) {
       response_url: response_url,
       channel: null,
     };
+
+    if( isUseResponseUrl && (response_url== "" || response_url==undefined) && isViaCmdOnly) {
+      let blocks = [
+
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: parameterizedString(langDict[appLang]['modal_ch_via_cmd_only'],{slack_command:slackCommand,bot_name:botName})
+            //text: stri18n(appLang,'modal_ch_via_cmd_only'),
+          },
+        }
+      ];
+
+      const result = await client.views.open({
+        token: context.botToken,
+        trigger_id: trigger_id,
+        view: {
+          type: 'modal',
+          callback_id: 'modal_poll_submit',
+          private_metadata: JSON.stringify(privateMetadata),
+          title: {
+            type: 'plain_text',
+            text: stri18n(appLang,'info_create_poll'),
+          },
+          close: {
+            type: 'plain_text',
+            text: stri18n(appLang,'btn_cancel'),
+          },
+          blocks: blocks,
+        }
+      });
+      return;
+
+    }
 
     let blocks = [
       {

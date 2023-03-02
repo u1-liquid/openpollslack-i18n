@@ -6,6 +6,7 @@
   "app_lang_user_selectable": true,
   "use_response_url": true,
   "menu_at_the_end": false,
+  "create_via_cmd_only": false,
   "add_number_emoji_to_choice": false,
   "add_number_emoji_to_choice_btn": false,
   "help_link": "https://gitlab.com/kazualex/openpollslack.git",
