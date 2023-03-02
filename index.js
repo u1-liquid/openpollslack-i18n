@@ -2459,6 +2459,7 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
     team: null,
     channel,
     ts: null,
+    created_ts: new Date(),
     user_id: userId,
     cmd: cmd,
     question: question,
