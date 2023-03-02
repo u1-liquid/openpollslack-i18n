@@ -9,7 +9,8 @@ const { Mutex } = require('async-mutex');
 
 const fileLang = require('node:fs');
 
-const globLang = require('glob');
+//const globLang = require('glob');
+const {globSync} = require("glob");
 
 let langDict = {};
 
@@ -76,10 +77,11 @@ const createDBIndex = async () => {
 }
 
 let langCount = 0;
-globLang.sync( './language/*.json' ).forEach( function( file ) {
-  let dash = file.split("/");
-  if(dash.length === 3) {
-    let dot = dash[2].split(".");
+
+//globLang.sync( './language/*.json' ).forEach( function( file ) {
+globSync( './language/*.json' ).forEach( function( file ) {
+  let dash = file.split(/[\\/]+/);
+    let dot = dash[dash.length-1].split(".");
     if(dot.length === 2) {
       let lang = dot[0];
       console.log("Lang file ["+lang+"]: "+file);
@@ -91,7 +93,6 @@ globLang.sync( './language/*.json' ).forEach( function( file ) {
         langList[lang] = lang;
       langCount++;
     }
-  }
 });
 console.log("Lang Count: "+langCount);
 console.log("Selected Lang: "+gAppLang);
