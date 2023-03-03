@@ -659,6 +659,23 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
+          text: '*Create a poll using GUI*',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "```\n/"+slackCommand+"```",
+        },
+      },
+      {
+        type: 'divider',
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
           text: '*Simple poll*',
         },
       },
@@ -765,6 +782,23 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         text: {
           type: 'mrkdwn',
           text: "```\n/"+slackCommand+" config```",
+        },
+      },
+      {
+        type: 'divider',
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: stri18n(appLang,'info_need_help')
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `<${helpLink}|${helpLink}>`,
         },
       },
     ];
