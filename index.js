@@ -2531,6 +2531,12 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
         text: stri18n(userLang,'menu_user_self_vote'),
       },
       value: JSON.stringify({action: 'btn_my_votes', p_id:pollID, user: userId, user_lang: userLang }),
+    },{
+      text: {
+        type: 'plain_text',
+        text: stri18n(userLang,'menu_command_info'),
+      },
+      value: JSON.stringify({action: 'btn_command_info', p_id:pollID, user: userId, user_lang: userLang }),
     }],
   }];
 
@@ -2771,6 +2777,8 @@ async function btnActions(args) {
     supportAction(body, client, context)
   else if ('btn_my_votes' === value.action)
     myVotes(body, client, context);
+  else if ('btn_command_info' === value.action)
+    commandInfo(body, client, context, value);
   else if ('btn_users_votes' === value.action)
     usersVotes(body, client, context, value);
   else if ('btn_reveal' === value.action)
@@ -2845,6 +2853,58 @@ async function supportAction(body, client, context) {
     text: stri18n(gAppLang,'menu_support_open_poll'),
   };
   await postChat(body.response_url,'ephemeral',mRequestBody);
+
+}
+
+async function commandInfo(body, client, context, value) {
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(context));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+
+  const pollData = await pollCol.findOne({ _id: new ObjectId(value.p_id) });
+  let pollCmd = "NOTFOUND";
+  if (pollData) {
+    //console.log(pollData);
+    if(pollData.hasOwnProperty("cmd")) pollCmd = pollData.cmd;
+  }
+
+  let blocks = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: stri18n(appLang,'info_command_source_text'),
+      },
+    },
+    {
+      type: 'divider',
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: pollCmd
+      },
+    }
+  ];
+
+  const result = await client.views.open({
+    token: context.botToken,
+    trigger_id: body.trigger_id,
+    view: {
+      type: 'modal',
+      title: {
+        type: 'plain_text',
+        text: stri18n(appLang,'menu_command_info'),
+      },
+      close: {
+        type: 'plain_text',
+        text: stri18n(appLang,'btn_close'),
+      },
+      blocks: blocks,
+    }
+  });
+  return;
 
 }
 
