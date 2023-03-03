@@ -2791,11 +2791,15 @@ async function supportAction(body, client, context) {
     return;
   }
 
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+
   const blocks = [{
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: stri18n(gAppLang,'menu_support_love_app'),
+      text: stri18n(appLang,'menu_support_love_app'),
     },
   },
   { type: 'divider' },
@@ -2803,13 +2807,13 @@ async function supportAction(body, client, context) {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: stri18n(gAppLang,'menu_support_contribute'),
+      text: stri18n(appLang,'menu_support_contribute'),
     },
     accessory: {
       type: 'button',
       text: {
         type: 'plain_text',
-        text: stri18n(gAppLang,'menu_support_source'),
+        text: stri18n(appLang,'menu_support_source'),
       },
       style: 'primary',
       url: helpLink,
@@ -2820,13 +2824,13 @@ async function supportAction(body, client, context) {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: stri18n(gAppLang,'menu_support_me'),
+      text: stri18n(appLang,'menu_support_me'),
     },
     accessory: {
       type: 'button',
       text: {
         type: 'plain_text',
-        text: stri18n(gAppLang,'menu_support_me_buy_coffee'),
+        text: stri18n(appLang,'menu_support_me_buy_coffee'),
       },
       url: supportUrl,
       action_id: 'ignore_me',
