@@ -4,6 +4,7 @@ Open Poll+ is free and open source app for create a poll in Slack.\
 Open Poll+ est une application gratuite et open source pour créer des sondages dans Slack.\
 Open Poll+ ist eine kostenlose und Open-Source-App zum Erstellen von Umfragen in Slack.\
 Open Poll+ es una aplicación gratuita y de código abierto para crear encuestas en Slack.\
+Open Poll+ ist eine kostenlose und Open-Source-App zum Erstellen von Umfragen in Slack.\
 Open Poll+は、Slackで投票を作成するための無料かつオープンソースのアプリです。\
 Open Poll+는 Slack에서 설문 조사를 작성하기 위한 무료 및 오픈 소스 앱입니다.\
 Open Poll+ - бесплатное приложение с открытым исходным кодом для создания опросов в Slack.\
