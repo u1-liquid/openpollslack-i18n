@@ -161,7 +161,15 @@ function getTeamOrEnterpriseId (body) {
 const getTeamOverride  = async (mTeamId) => {
     let ret = {};
     try {
-        const team = await orgCol.findOne({ 'team.id': mTeamId });
+        //const team = await orgCol.findOne({ 'team.id': mTeamId });
+        const team = await orgCol.findOne(
+            {
+              $or: [
+                {'team.id': mTeamId},
+                {'enterprise.id': mTeamId},
+              ]
+            }
+        );
         if (team) {
             if(team.hasOwnProperty("openPollConfig")) ret = team.openPollConfig;
         }
@@ -874,7 +882,15 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         }
 
         validWritePara += `\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
-        let team = await orgCol.findOne({ 'team.id': getTeamOrEnterpriseId(body) });
+        let teamOrEntId = getTeamOrEnterpriseId(body);
+        let team = await orgCol.findOne(
+            {
+              $or: [
+                {'team.id': teamOrEntId},
+                {'enterprise.id': teamOrEntId},
+              ]
+            }
+        );
         let validConfigUser = "";
         if (team) {
           if(team.hasOwnProperty("user"))
@@ -978,7 +994,15 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           team.openPollConfig[inputPara] = inputVal;
           //console.log(team);
           try {
-              await orgCol.replaceOne({'team.id': getTeamOrEnterpriseId(body)}, team);
+              //await orgCol.replaceOne({'team.id': getTeamOrEnterpriseId(body)}, team);
+              await orgCol.replaceOne(
+                  {
+                    $or: [
+                      {'team.id': teamOrEntId},
+                      {'enterprise.id': teamOrEntId},
+                    ]
+                  }
+                  , team);
           }
           catch (e) {
               console.error(e);
