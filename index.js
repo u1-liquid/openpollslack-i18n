@@ -20,6 +20,7 @@ const port = config.get('port');
 const signing_secret = config.get('signing_secret');
 const slackCommand = config.get('command');
 const helpLink = config.get('help_link');
+const helpEmail = config.get('help_email');
 const supportUrl = config.get('support_url');
 const gAppLang = config.get('app_lang');
 const gIsAppLangSelectable = config.get('app_lang_user_selectable');
@@ -657,7 +658,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Open source poll for slack*',
+          text: '*Open source poll for Slack*',
         },
       },
       {
@@ -667,7 +668,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Create a poll using GUI*',
+          text: '*Create a poll using modal*',
         },
       },
       {
@@ -806,6 +807,13 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
+          text: `${helpEmail}`,
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
           text: `<${helpLink}|${helpLink}>`,
         },
       },
@@ -881,7 +889,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           validWritePara += `\n/${slackCommand} config write ${eachOverrideable} [true/false]`;
         }
 
-        validWritePara += `\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
+        validWritePara += `\n${helpEmail}\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
         let teamOrEntId = getTeamOrEnterpriseId(body);
         let team = await orgCol.findOne(
             {
@@ -1979,6 +1987,9 @@ async function createModal(context, client, trigger_id,response_url) {
           elements: [
             {
               type: 'conversations_select',
+              filter: {
+                include: ['private','public']
+              },
               action_id: 'modal_poll_channel',
               placeholder: {
                 type: 'plain_text',

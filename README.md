@@ -110,9 +110,9 @@ Usage:
 /poll lang th "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
 
-# Open source poll for slack
+# Open source poll for Slack
 
-Welcome to the open source poll for slack.  
+Welcome to the open source poll for Slack.  
 This repository is hosted on [GitLab](https://gitlab.com/openpollslack/openpollslack). [Github repository](https://github.com/KazuAlex/openpollslack) is only a mirror.  
 But feel free to open new issues on both.  
 
