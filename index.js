@@ -71,6 +71,7 @@ try {
 
 const createDBIndex = async () => {
   orgCol.createIndex({"team.id": 1});
+  orgCol.createIndex({"enterprise.id": 1});
   votesCol.createIndex({ channel: 1, ts: 1 });
   closedCol.createIndex({ channel: 1, ts: 1 });
   hiddenCol.createIndex({ channel: 1, ts: 1 });
@@ -217,12 +218,34 @@ const receiver = new ExpressReceiver({
         mTeamId = installation.team.id;
       }
 
-      const team = await orgCol.findOne({ 'team.id': mTeamId });
+      const team = await orgCol.findOne({
+        $or: [
+          {'team.id': mTeamId},
+          {'enterprise.id': mTeamId},
+        ]
+      });
       if (team) {
-        await orgCol.replaceOne({ 'team.id': mTeamId }, installation);
+        await orgCol.replaceOne(
+            {
+              $or: [
+                {'team.id': mTeamId},
+                {'enterprise.id': mTeamId},
+              ]
+            }, installation);
       } else {
         await orgCol.insertOne(installation);
       }
+
+      await orgCol.updateOne(
+          {
+            $or: [
+              {'team.id': mTeamId},
+              {'enterprise.id': mTeamId},
+            ]
+          }
+          ,
+          { $set: { created_ts: new Date()} }
+      );
 
       return mTeamId;
     },
