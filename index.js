@@ -823,23 +823,24 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: stri18n(appLang,'info_need_help')
+          text: parameterizedString(stri18n(appLang, 'info_need_help'), {email: helpEmail,link:helpLink}),
+          //text: stri18n(appLang,'info_need_help')
         },
       },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `${helpEmail}`,
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `<${helpLink}|${helpLink}>`,
-        },
-      },
+      // {
+      //   type: 'section',
+      //   text: {
+      //     type: 'mrkdwn',
+      //     text: `${helpEmail}`,
+      //   },
+      // },
+      // {
+      //   type: 'section',
+      //   text: {
+      //     type: 'mrkdwn',
+      //     text: `<${helpLink}|${helpLink}>`,
+      //   },
+      // },
     ];
     let mRequestBody = {
       token: context.botToken,
@@ -912,7 +913,8 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           validWritePara += `\n/${slackCommand} config write ${eachOverrideable} [true/false]`;
         }
 
-        validWritePara += `\n${helpEmail}\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
+        validWritePara +=  '\n'+parameterizedString(stri18n(userLang, 'info_need_help'), {email: helpEmail,link:helpLink});
+        //validWritePara += `\n${helpEmail}\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
         let teamOrEntId = getTeamOrEnterpriseId(body);
         let team = await orgCol.findOne(
             {
@@ -2641,7 +2643,7 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
       options: [{
         text: {
           type: 'plain_text',
-          text: stri18n(userLang,'menu_love_open_poll'),
+          text: stri18n(userLang,'menu_support_contact'),
         },
         value: JSON.stringify({action: 'btn_love_open_poll', user: userId}),
       }],
@@ -2786,7 +2788,8 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
         elements: [
           {
             type: 'mrkdwn',
-            text: `<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`,
+            text: parameterizedString(stri18n(userLang, 'info_need_help'), {email: helpEmail,link:helpLink}),
+            //text: `<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`,
           },
           {
             type: 'mrkdwn',
@@ -2802,7 +2805,8 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
         elements: [
           {
             type: 'mrkdwn',
-            text: `<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`,
+            text: parameterizedString(stri18n(userLang, 'info_need_help'), {email: helpEmail,link:helpLink}),
+            //text: `<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`,
           }
         ],
       });
@@ -2899,7 +2903,8 @@ async function supportAction(body, client, context) {
     type: 'section',
     text: {
       type: 'mrkdwn',
-      text: stri18n(appLang,'menu_support_love_app'),
+      text: parameterizedString(stri18n(appLang, 'menu_support_info'), {email: helpEmail,link:helpLink}),
+      //text: stri18n(appLang,'menu_support_info'),
     },
   },
   { type: 'divider' },
