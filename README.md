@@ -14,23 +14,26 @@ Open Poll+是用于在Slack中创建调查的免费开源应用程序。
 
 # About this fork 
 
-I have make some change to make it more customizable such as:
-- Allow choices add by others
-- True Anonymous Vote (Poller can't see users votes if this mode is ON) : Default ON
-- Support Slack's Enterprise Grid, Slack Connect
-- Customizeable UI (Order, Show/Hide Element you don't want to make it cleaner)
-- UI Language, Multiple language support (please feel free to report any mistranslation)
-- Separate configuation for each Slack team
-- Better error handling that may crash the server
+I have made some changes to make it more customizable, such as:
+- Allowing choices to be added by others
+- True anonymous voting (Poller can't see users' votes if this mode is ON): Default ON
+- Supporting Slack's Enterprise Grid and Slack Connect
+- Customizable UI (Order, Show/Hide Elements you don't want to make it cleaner)
+- UI Language, multiple language support (Please feel free to report any mistranslations)
+- Separate configuration for each Slack team
+- Better error handling to prevent crashes on the server
 
 (Please see detail below)
 
 ### If I just want to use it without self-host?
 You can use "Add to slack" button [on this site](https://siamhos.com/openpollplus/index_plus.html)
+or visit [Slack app directory](https://slack.com/apps/A04EQUT9X1C) 
 
-PLEASE NOTE: Link above will run lastest code on my devlopment server, you can use it for free, but it may contain bugs or may down for mantanance without any notice, If you found any bugs please feel free to report. 
+PLEASE NOTE: The link above will run the latest code on my development server. You can use it for free, but it may contain bugs or may be down for maintenance without any notice. If you find any bugs, please feel free to report them.
 
-After add to slack please use `/poll config` to config what options you want to enable/disable on your Slack team.
+After adding the app to Slack, please use the `/poll config` command to configure which options you want to enable or disable on your Slack team.
+
+**If you have trouble adding app to Slack or creating poll, try to uninstall it first then reinstall as you might have old version that not compatible with current version(version before App was published to Slack app dir.)** 
 
 If you didn't use any of these Feature you might want to use original App here [GitLab](https://gitlab.com/openpollslack/openpollslack).
 
@@ -75,7 +78,7 @@ Usage:
 
 ## Example
 
-- if `response_url` is not enable or not in use, user will get feedback if poll can create in that channel or not (required `channels:read`,`groups:read`,`mpim:read`,`im:read` Permissions)
+- if `response_url` is not enable or not in use, user will get feedback if poll can create in that channel or not (required `channels:read`,`groups:read`,`mpim:read` Permissions)
 
   ![Alt text](./assets/poll-ch-check-feedback.png?raw=true "poll-ch-check-feedback")
 - User language selectable
@@ -98,7 +101,7 @@ Usage:
  ![Alt text](./assets/poll-anonymous-note.png?raw=true "poll-anonymous-note")
 ## Additional Permissions
 
-`channels:read`,`groups:read`,`mpim:read`,`im:read` : to check if bot in selected channel (if not using `response_url`)
+`channels:read`,`groups:read`,`mpim:read` : to check if bot in selected channel (if not using `response_url`)
 ## Command usages
 ### Allow choices add by others
 ```
