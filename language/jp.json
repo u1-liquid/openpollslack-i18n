@@ -16,7 +16,7 @@
   "info_by": ":writing_hand: <@{{user_id}}> による",
   "info_addon": "",
   "info_all_user_vote": "ユーザーの投票",
-  "info_need_help": "ヘルプが必要ですか？ | <mailto:{{email}}|E-Mail> | <{{link}}|URL>",
+  "info_need_help": "ヘルプが必要ですか？ | <mailto:{{email}}|E-Mail> | <{{link}}|URL>\n誤った翻訳があれば、報告してください。修正いたします！",
   "info_create_poll": "投票を作成する",
   "info_command_source": ":information_source:",
   "info_command_source_text": "この投票を作成するためのコマンド：",

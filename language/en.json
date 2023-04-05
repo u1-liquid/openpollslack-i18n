@@ -16,7 +16,7 @@
   "info_by": ":writing_hand: by <@{{user_id}}>",
   "info_addon": "",
   "info_all_user_vote": "Users votes",
-  "info_need_help": "Need help ? | <mailto:{{email}}|E-Mail> | <{{link}}|URL>",
+  "info_need_help": "Need help ? | <mailto:{{email}}|E-Mail> | <{{link}}|URL>\nPlease report any wrong translation, we will fix it for you!",
   "info_create_poll": "Create a poll",
   "info_command_source": ":information_source:",
   "info_command_source_text": "Command to create this poll:",

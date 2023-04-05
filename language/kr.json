@@ -16,7 +16,7 @@
   "info_by": ":writing_hand: <@{{user_id}}>이(가) 만듦",
   "info_addon": "",
   "info_all_user_vote": "모든 사용자 투표",
-  "info_need_help": "도움이 필요하세요? | <mailto:{{email}}|E-Mail> | <{{link}}|URL>",
+  "info_need_help": "도움이 필요하세요? | <mailto:{{email}}|E-Mail> | <{{link}}|URL>\n잘못된 번역이 있다면 알려주세요. 수정하겠습니다!",
   "info_create_poll": "투표 생성",
   "info_command_source": ":information_source:",
   "info_others_add_choice": "다른 선택지 추가하기...",

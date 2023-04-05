@@ -16,7 +16,7 @@
   "info_by": ":writing_hand: luoja <@{{user_id}}>",
   "info_addon": "",
   "info_all_user_vote": "Käyttäjien äänet",
-  "info_need_help": "Tarvitsetko apua? | <mailto:{{email}}|E-Mail> | <{{link}}|URL>",
+  "info_need_help": "Tarvitsetko apua? | <mailto:{{email}}|E-Mail> | <{{link}}|URL>\nIlmoita meille mahdollisista käännösvirheistä, korjaamme ne puolestasi!",
   "info_create_poll": "Luo kysely",
   "info_command_source": ":information_source:",
   "info_command_source_text": "Komento tämän kyselyn luomiseksi:",

@@ -16,7 +16,7 @@
   "info_by": ":writing_hand: 由 <@{{user_id}}> 創建",
   "info_addon": "",
   "info_all_user_vote": "用戶投票結果",
-  "info_need_help": "需要幫助嗎？ | <mailto:{{email}}|E-Mail> | <{{link}}|URL>",
+  "info_need_help": "需要幫助嗎？ | <mailto:{{email}}|E-Mail> | <{{link}}|URL>\n請報告任何錯誤的翻譯，我們將為您進行修正！",
   "info_create_poll": "創建一個投票",
   "info_command_source": ":information_source:",
   "info_command_source_text": "建立此投票的指令：",
