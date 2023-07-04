@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/KazuAlex/openpollslack.git"
+    "url": "git+https://github.com/polppol/openpollslack-i18n.git"
   },
   "keywords": [
     "opensource",
@@ -16,22 +16,22 @@
     "slack",
     "app"
   ],
-  "author": "KazuAlex",
+  "author": "PolPPol",
   "license": "GPL-3.0-or-later",
   "bugs": {
-    "url": "https://github.com/KazuAlex/openpollslack/issues"
+    "url": "https://github.com/polppol/openpollslack-i18n/issues"
   },
-  "homepage": "https://github.com/KazuAlex/openpollslack#readme",
+  "homepage": "https://github.com/polppol/openpollslack-i18n#readme",
   "dependencies": {
-    "@slack/bolt": "^3.12.2",
+    "@slack/bolt": "^3.13.1",
     "async-mutex": "^0.4.0",
     "body-parser": "^1.20.2",
     "cli-progress": "^3.12.0",
     "compression": "^1.7.4",
     "config": "^3.3.9",
     "express": "^4.18.2",
-    "glob": "^9.1.2",
-    "helmet": "^6.0.1",
-    "mongodb": "^5.1.0"
+    "glob": "^10.3.1",
+    "helmet": "^7.0.0",
+    "mongodb": "^5.6.0"
   }
 }
