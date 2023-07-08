@@ -2384,7 +2384,7 @@ app.action('modal_poll_options', async ({ action, ack, body, client, context }) 
   }
   catch (e){
     //just ignore it will be process again on modal_poll_submit
-    console.debug("Error on modal_poll_submit (maybe user click too fast");
+    console.debug("Error on modal_poll_options (maybe user click too fast)");
   }
 });
 
