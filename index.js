@@ -2464,7 +2464,23 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
     return;
   }
 
-  const cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang);
+  const cmd = "";
+  try {
+    createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang);
+  }
+  catch (e)
+  {
+    console.error(e);
+    let mRequestBody = {
+      token: context.botToken,
+      channel: channel,
+      user: body.user.id,
+      attachments: [],
+      text: stri18n(userLang,'err_process_command'),
+    };
+    await postChat(response_url,'ephemeral',mRequestBody);
+    return;
+  }
 
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
   let isCompactUI = gIsCompactUI;
@@ -2523,13 +2539,27 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
     cmd += ` lang ${userLang}`
   }
 
-  question = question.replace(/"/g, "\\\"");
-  cmd += ` "${question}"`
+  let processingOption = "";
+  try{
 
-  for (let option of options) {
-    option = option.replace(/"/g, "\\\"");
-    cmd += ` "${option}"`
+    question = question.replace(/"/g, "\\\"");
+    cmd += ` "${question}"`
+
+    for (let option of options) {
+      processingOption = option;
+      option = option.replace(/"/g, "\\\"");
+      cmd += ` "${option}"`
+    }
+
   }
+  catch (e)
+  {
+    console.error("question = "+question);
+    console.error("processingOption = "+processingOption);
+    //console.error(e);
+    throw e;
+  }
+
 
   return cmd;
 }
