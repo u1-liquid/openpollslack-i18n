@@ -2464,9 +2464,9 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
     return;
   }
 
-  const cmd = "";
+  let cmd = "";
   try {
-    createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang);
+    cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang);
   }
   catch (e)
   {
@@ -2991,8 +2991,11 @@ async function commandInfo(body, client, context, value) {
   const pollData = await pollCol.findOne({ _id: new ObjectId(value.p_id) });
   let pollCmd = "NOTFOUND";
   if (pollData) {
-    //console.log(pollData);
-    if(pollData.hasOwnProperty("cmd")) pollCmd = pollData.cmd;
+    if(pollData.hasOwnProperty("cmd")) {
+      if(pollData.cmd.trim().length > 0) {
+        pollCmd = pollData.cmd;
+      }
+    }
   }
 
   let blocks = [
