@@ -73,6 +73,7 @@ const createDBIndex = async () => {
   orgCol.createIndex({"team.id": 1});
   orgCol.createIndex({"enterprise.id": 1});
   votesCol.createIndex({ channel: 1, ts: 1 });
+  votesCol.createIndex({ poll_id: 1 });
   closedCol.createIndex({ channel: 1, ts: 1 });
   hiddenCol.createIndex({ channel: 1, ts: 1 });
   pollCol.createIndex({ channel: 1, ts: 1 });
@@ -1421,6 +1422,10 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
 
   let value = JSON.parse(action.value);
 
+  let poll_id = null;
+  if(value.hasOwnProperty('poll_id'))
+    poll_id = value.poll_id;
+
   let userLang = null;
   if(value.hasOwnProperty('user_lang'))
     if(value.user_lang!="" && value.user_lang != null)
@@ -1491,6 +1496,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
           team: message.team,
           channel,
           ts: message.ts,
+          poll_id: poll_id,
           votes: {},
         });
         poll = {};
@@ -2990,6 +2996,8 @@ async function commandInfo(body, client, context, value) {
 
   const pollData = await pollCol.findOne({ _id: new ObjectId(value.p_id) });
   let pollCmd = "NOTFOUND";
+  let poll_id = value.p_id.toString();
+  if(poll_id.length == 0) poll_id = "N/A";
   if (pollData) {
     if(pollData.hasOwnProperty("cmd")) {
       if(pollData.cmd.trim().length > 0) {
@@ -3014,6 +3022,16 @@ async function commandInfo(body, client, context, value) {
       text: {
         type: 'mrkdwn',
         text: pollCmd
+      },
+    },
+    {
+      type: 'divider',
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: "Poll ID: "+poll_id
       },
     }
   ];
