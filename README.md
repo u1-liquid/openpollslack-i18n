@@ -1,4 +1,8 @@
 
+# Note to self-host user
+
+When updating the app, please make sure you are using the latest config file, as some releases may contain new features that require certain configuration parameters. If those parameters are missing, the app might not be able to start correctly.
+
 # What is this app?
 Open Poll+ is free and open source app for create a poll in Slack.\
 Open Poll+ เป็นแอปฟรีและ Open source ใช้สำหรับสร้างโพลหรือคำถามต่างๆใน Slack.\
@@ -51,7 +55,10 @@ If you didn't use any of these Feature you might want to use original App here [
 - `show_command_info` if set to `false`; command that use to create poll will be removed (You still can see command in Menu)
 - `true_anonymous` if set to `true`; Poller will no longer see who voted which options if poll is anonymous, If this mode is disabled; `info_anonymous_notice` will show to let users know that poller can still see there votes
 - `delete_data_on_poll_delete` if set to `true`; When poller request to delete the poll, all data in database that refer to that poll will be deleted. If you want to disable it please make sure if compliance with your policy.
-- `log_level` valid options are: `debug` `info` `warn` `error`
+- `log_level_app` valid options are: `debug` `verbose` `info` `warn` `error`
+- `log_level_bolt` valid options are: `debug` `verbose` `info` `warn` `error`
+- `log_to_file` valid options are: `true` `false`
+- `log_dir` folder of log file
 
 ## Team config (Override Server config)
 

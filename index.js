@@ -12,6 +12,11 @@ const fileLang = require('node:fs');
 //const globLang = require('glob');
 const {globSync} = require("glob");
 
+const { createLogger, format, transports } = require('winston');
+const fs = require('fs');
+const path = require('path');
+const moment = require('moment');
+
 let langDict = {};
 
 let langList = {};
@@ -36,7 +41,9 @@ const gTrueAnonymous = config.get('true_anonymous');
 const gIsShowNumberInChoice = config.get('add_number_emoji_to_choice');
 const gIsShowNumberInChoiceBtn = config.get('add_number_emoji_to_choice_btn');
 const gIsDeleteDataOnRequest = config.get('delete_data_on_poll_delete');
-const gLogLevel = config.get('log_level');
+const gLogLevelApp = config.get('log_level_app');
+const gLogLevelBolt = config.get('log_level_bolt');
+const gLogToFile = config.get('log_to_file');
 
 const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete"];
 
@@ -51,10 +58,119 @@ let migrations = null;
 
 const mutexes = {};
 
+console.log('Init Logger..');
+
+const prettyJson = format.printf(info => {
+  if (info.message.constructor === Object) {
+    info.message = JSON.stringify(info.message, null, 4)
+  }
+  return `${info.timestamp} ${info.level}: ${info.message}`
+})
+
+const appTransportsArray = [
+  new transports.Console({
+    level: gLogLevelApp,
+    format: format.combine(
+        format.colorize(),
+        format.prettyPrint(),
+        prettyJson,
+        format.printf(
+            info => `${info.timestamp} ${info.level}: ${info.message}`
+        )
+    )
+  })
+];
+
+const boltTransportsArray = [
+  new transports.Console({
+    level: gLogLevelBolt,
+    format: format.combine(
+        format.colorize(),
+        format.prettyPrint(),
+        prettyJson,
+        format.printf(
+            info => `${info.timestamp} ${info.level}: ${info.message}`
+        )
+    )
+  })
+];
+
+if (gLogToFile) {
+  const gLogDir = config.get('log_dir');
+  // Create the log directory if it does not exist
+  if (!fs.existsSync(gLogDir)) {
+    fs.mkdirSync(gLogDir);
+  }
+  const logTS = moment().format('YYYY-MM-DD_HH_mm_ss');
+  const filenameLogApp = path.join(gLogDir, logTS+'_app.log');
+  const filenameLogBolt = path.join(gLogDir, logTS+'_bolt.log');
+
+  let logFileWritable = true;
+  fs.access(filenameLogApp, fs.constants.W_OK, (err) => {
+
+    if (err) {
+      if (err.code === 'ENOENT') {
+        //logger.info('The file does not exist, it can be created');
+        logger.info(`Log file '${filenameLogApp}' is writable`);
+      } else {
+        logger.error(`Log file '${filenameLogApp}' is not writable, SKIP LOG TO FILE!`);
+        logFileWritable = false;
+      }
+    } else {
+      logger.info(`Log file '${filenameLogApp}' is writable`);
+    }
+  });
+  if(logFileWritable) {
+    appTransportsArray.push(new transports.File({ filename:filenameLogApp }));
+  }
+
+  logFileWritable = true;
+  fs.access(filenameLogBolt, fs.constants.W_OK, (err) => {
+    if (err) {
+      if (err.code === 'ENOENT') {
+        //logger.info('The file does not exist, it can be created');
+        logger.info(`Log file '${filenameLogBolt}' is writable`);
+      } else {
+        logger.error(`Log file '${filenameLogBolt}' is not writable, SKIP LOG TO FILE!`);
+        logFileWritable = false;
+      }
+    } else {
+      logger.info(`Log file '${filenameLogBolt}' is writable`);
+    }
+  });
+  if(logFileWritable) {
+    boltTransportsArray.push(new transports.File({ filename:filenameLogBolt }));
+  }
+}
+
+const logger = createLogger({
+  level: gLogLevelApp,
+  format: format.combine(
+      format.timestamp({
+        format: 'YYYY-MM-DD HH:mm:ss'
+      }),
+      format.printf(info => `${info.timestamp} ${info.level}[App]: ${info.message}`)
+  ),
+  transports: appTransportsArray
+});
+
+const loggerBolt = createLogger({
+  level: gLogLevelApp,
+  format: format.combine(
+      format.timestamp({
+        format: 'YYYY-MM-DD HH:mm:ss'
+      }),
+      format.printf(info => `${info.timestamp} ${info.level}[Bolt]: ${info.message}`)
+  ),
+  transports: boltTransportsArray
+});
+
+logger.info('Server starting...');
+
 try {
-  console.log('Connecting to database server...');
+  logger.info('Connecting to database server...');
   client.connect();
-  console.log('Connected successfully to server')
+  logger.info('Connected successfully to server')
   const db = client.db(config.get('mongo_db_name'));
   orgCol = db.collection('token');
   votesCol = db.collection('votes');
@@ -65,7 +181,7 @@ try {
   migrations = new Migrations(db);
 } catch (e) {
   client.close();
-  console.error(e)
+  logger.error(e)
   process.exit();
 }
 
@@ -87,7 +203,7 @@ globSync( './language/*.json' ).forEach( function( file ) {
     let dot = dash[dash.length-1].split(".");
     if(dot.length === 2) {
       let lang = dot[0];
-      console.log("Lang file ["+lang+"]: "+file);
+      logger.info("Lang file ["+lang+"]: "+file);
       let fileData = fileLang.readFileSync(file);
       langDict[lang] = JSON.parse(fileData.toString());
       if(langDict[lang].hasOwnProperty('info_lang_name'))
@@ -99,14 +215,14 @@ globSync( './language/*.json' ).forEach( function( file ) {
 });
 
 
-console.log("Lang Count: "+langCount);
-console.log("Selected Lang: "+gAppLang);
+logger.info("Lang Count: "+langCount);
+logger.info("Selected Lang: "+gAppLang);
 if(!langDict.hasOwnProperty('en')) {
-  console.error("language/en.json NOT FOUND!");
+  logger.error("language/en.json NOT FOUND!");
   throw new Error("language/en.json NOT FOUND!");
 }
 if(!langDict.hasOwnProperty(gAppLang)) {
-  console.error(`language/${gAppLang}.json NOT FOUND!`);
+  logger.error(`language/${gAppLang}.json NOT FOUND!`);
   throw new Error(`language/${gAppLang}.json NOT FOUND!`);
 }
 
@@ -138,7 +254,7 @@ const stri18n = (lang,key) => {
 
 function getTeamOrEnterpriseId (body) {
   body = JSON.parse(JSON.stringify(body));
-  //console.debug(body);
+  //logger.debug(body);
   if(body.hasOwnProperty('isEnterpriseInstall')) {
     if(body.isEnterpriseInstall=='false' || body.isEnterpriseInstall == false) return body.teamId;
     else return body.enterpriseId;
@@ -182,8 +298,21 @@ const getTeamOverride  = async (mTeamId) => {
     }
     return ret;
 }
+
+const boltLoggerAdapter = {
+  debug: (msg) => loggerBolt.debug(msg),
+  info: (msg) => loggerBolt.info(msg),
+  warn: (msg) => loggerBolt.warn(msg),
+  error: (msg) => loggerBolt.error(msg),
+  setLevel: (level) => loggerBolt.level = level,
+  getLevel: () => loggerBolt.level,
+  setName: () => {} // This can be a no-op if you don't need to implement it
+};
+
 const receiver = new ExpressReceiver({
   signingSecret: signing_secret,
+  logger: boltLoggerAdapter,
+  //logLevel: gLogLevelBolt,
   clientId: config.get('client_id'),
   clientSecret: config.get('client_secret'),
   scopes: ['commands', 'chat:write.public', 'chat:write', 'groups:write','channels:read','groups:read','mpim:read'],
@@ -203,8 +332,7 @@ const receiver = new ExpressReceiver({
       },
       failure: (error, installOptions , req, res) => {
         res.redirect(config.get('oauth_failure'));
-        //console.debug(req);
-        console.debug(res);
+        logger.debug(res);
       },
     },
   },
@@ -252,7 +380,7 @@ const receiver = new ExpressReceiver({
     },
     fetchInstallation: async (installQuery) => {
       let mTeamId = "";
-      //console.debug(installQuery);
+      //logger.debug(installQuery);
       if (installQuery.isEnterpriseInstall && installQuery.enterpriseId !== undefined) {
         // org wide app installation lookup
         mTeamId = installQuery.enterpriseId;
@@ -260,7 +388,7 @@ const receiver = new ExpressReceiver({
         try {
           return await orgCol.findOne({ 'enterprise.id': mTeamId });
         } catch (e) {
-          console.error(e)
+          logger.error(e)
           throw new Error('No matching authorizations');
         }
 
@@ -272,7 +400,7 @@ const receiver = new ExpressReceiver({
         try {
           return await orgCol.findOne({ 'team.id': mTeamId });
         } catch (e) {
-          console.error(e)
+          logger.error(e)
           throw new Error('No matching authorizations');
         }
       }
@@ -280,8 +408,6 @@ const receiver = new ExpressReceiver({
 
     },
   },
-  logLevel: gLogLevel,
-  //logLevel: LogLevel.DEBUG,
 });
 
 receiver.router.get('/ping', (req, res) => {
@@ -289,7 +415,7 @@ receiver.router.get('/ping', (req, res) => {
 })
 
 const app = new App({
-  receiver: receiver,
+  receiver: receiver
 });
 
 const sendMessageUsingUrl = async (url,newMessage) => {
@@ -323,7 +449,7 @@ const postChat = async (url,type,requestBody) => {
         requestBody['delete_original'] = true;
         break;
       default:
-        console.error("Invalid post type:"+type);
+        logger.error("Invalid post type:"+type);
         return;
     }
     await sendMessageUsingUrl(url,requestBody);
@@ -345,7 +471,7 @@ const postChat = async (url,type,requestBody) => {
           await app.client.chat.delete(requestBody);
           break;
         default:
-          console.error("Invalid post type:"+type)
+          logger.error("Invalid post type:"+type)
           return;
       }
     } catch (e) {
@@ -353,7 +479,7 @@ const postChat = async (url,type,requestBody) => {
           e && e.data && e.data && e.data.error
           && 'channel_not_found' === e.data.error
       ) {
-        console.error('Channel not found error : ignored')
+        logger.error('Channel not found error : ignored')
       }
     }
   }
@@ -639,7 +765,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
       },
     });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
   }
 });
 
@@ -1026,7 +1152,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           if(!team.hasOwnProperty("openPollConfig")) team.openPollConfig = {};
           team.openPollConfig.isset = true;
           team.openPollConfig[inputPara] = inputVal;
-          //console.log(team);
+          //logger.info(team);
           try {
               //await orgCol.replaceOne({'team.id': getTeamOrEnterpriseId(body)}, team);
               await orgCol.replaceOne(
@@ -1039,7 +1165,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                   , team);
           }
           catch (e) {
-              console.error(e);
+              logger.error(e);
               let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
@@ -1155,17 +1281,17 @@ const createModalBlockInput = (userLang)  => {
 };
 
 (async () => {
-  console.log('Start database migration.');
+  logger.info('Start database migration.');
   await migrations.init();
   await migrations.migrate();
-  console.log('End database migration.')
+  logger.info('End database migration.')
 
-  console.log('Check create DB index if not exist...');
+  logger.info('Check create DB index if not exist...');
   await createDBIndex();
 
   await app.start(process.env.PORT || port);
 
-  console.log('Bolt app is running!');
+  logger.info('Bolt app is running!');
 })();
 
 app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
@@ -1182,7 +1308,7 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
     || !body.view.id
     || !body.view.private_metadata
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(context));
@@ -1223,7 +1349,7 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
   }
   catch (e) {
     //do not ack so user can see some error
-    console.debug("Error on btn_add_choice (maybe user click too fast");
+    logger.debug("Error on btn_add_choice (maybe user click too fast");
   }
 
 });
@@ -1303,7 +1429,7 @@ app.action('btn_my_votes', async ({ ack, body, client, context }) => {
       }
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
   }
 });
 
@@ -1321,7 +1447,7 @@ app.action('btn_delete', async ({ action, ack, body, context }) => {
     || !action
     || !action.value
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
@@ -1329,7 +1455,7 @@ app.action('btn_delete', async ({ action, ack, body, context }) => {
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
   if (body.user.id !== action.value) {
-    console.log('reject req because invalid user');
+    logger.info('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -1364,7 +1490,7 @@ app.action('btn_reveal', async ({ action, ack, body, context }) => {
     || !action
     || !action.value
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
@@ -1373,7 +1499,7 @@ app.action('btn_reveal', async ({ action, ack, body, context }) => {
   let value = JSON.parse(action.value);
 
   if (body.user.id !== value.user) {
-    console.log('reject req because invalid user');
+    logger.info('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -1411,7 +1537,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
     || !body.channel
     || !body.channel.id
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
   const user_id = body.user.id;
@@ -1464,7 +1590,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
     try {
       release = await mutexes[`${message.team}/${channel}/${message.ts}`].acquire();
     } catch (e) {
-      console.log(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+      logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
     }
   } while (!release && countTry < 3);
 
@@ -1524,7 +1650,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
       //if not exist that mean this choice just add to poll
       if(!poll.hasOwnProperty(value.id))
       {
-        console.log("Vote array not found creating value.id="+value.id);
+        logger.info("Vote array not found creating value.id="+value.id);
         poll[value.id] = [];
       }
 
@@ -1672,7 +1798,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
       };
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -1711,7 +1837,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
     || !body.channel
     || !body.channel.id
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
@@ -1757,7 +1883,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
     try {
       release = await mutexes[`${message.team}/${channel}/${message.ts}`].acquire();
     } catch (e) {
-      console.log(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+      logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
     }
   } while (!release && countTry < 3);
   if (release) {
@@ -1877,7 +2003,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
       }
 
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -1992,7 +2118,7 @@ async function createModal(context, client, trigger_id,response_url) {
         },
       }
     ];
-    //console.debug(response_url);
+    //logger.debug(response_url);
     if(response_url!== "" && response_url && isUseResponseUrl)
     {
       blocks = blocks.concat([
@@ -2225,7 +2351,7 @@ async function createModal(context, client, trigger_id,response_url) {
       },
     ]);
 
-    //console.debug(JSON.stringify(blocks));
+    //logger.debug(JSON.stringify(blocks));
     const result = await client.views.open({
       token: context.botToken,
       trigger_id: trigger_id,
@@ -2249,7 +2375,7 @@ async function createModal(context, client, trigger_id,response_url) {
       }
     });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
   }
 }
 
@@ -2268,8 +2394,8 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
   const privateMetadata = JSON.parse(body.view.private_metadata);
   privateMetadata.channel = action.selected_channel || action.selected_conversation;
 
-  //console.debug(action);
-  //console.debug("CH:"+privateMetadata.channel);
+  //logger.debug(action);
+  //logger.debug("CH:"+privateMetadata.channel);
   let isChFound = true;
   let isChErr = false;
   try {
@@ -2287,7 +2413,7 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
     else
     {
       //ignote it!
-      console.debug("Error on client.conversations.info (maybe user click too fast) :"+e.message);
+      logger.debug("Error on client.conversations.info (maybe user click too fast) :"+e.message);
       isChErr = true;
     }
 
@@ -2300,10 +2426,10 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
       //test next element
       let nextIndex = parseInt(i)+1;
       if(blocks.length > nextIndex  ){
-        //console.log("Block" +nextIndex +"IS:");
-        //console.log(blocks[nextIndex]);
+        //logger.info("Block" +nextIndex +"IS:");
+        //logger.info(blocks[nextIndex]);
         if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type=="context"){
-          //console.log("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
+          //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
           if(isChErr) {
             blocks[nextIndex].elements[0].text = stri18n(appLang,'err_poll_ch_exception');
           }
@@ -2318,7 +2444,7 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
       }
     }
   }
-  //console.debug(blocks);
+  //logger.debug(blocks);
   const view = {
     type: body.view.type,
     private_metadata: JSON.stringify(privateMetadata),
@@ -2339,7 +2465,7 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
     });
   }
   catch (e) {
-    console.debug("Error on modal_poll_channel (maybe user click too fast");
+    logger.debug("Error on modal_poll_channel (maybe user click too fast");
   }
 });
 
@@ -2390,7 +2516,7 @@ app.action('modal_poll_options', async ({ action, ack, body, client, context }) 
   }
   catch (e){
     //just ignore it will be process again on modal_poll_submit
-    console.debug("Error on modal_poll_options (maybe user click too fast)");
+    logger.debug("Error on modal_poll_options (maybe user click too fast)");
   }
 });
 
@@ -2476,7 +2602,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   }
   catch (e)
   {
-    console.error(e);
+    logger.error(e);
     let mRequestBody = {
       token: context.botToken,
       channel: channel,
@@ -2560,9 +2686,9 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   }
   catch (e)
   {
-    console.error("question = "+question);
-    console.error("processingOption = "+processingOption);
-    //console.error(e);
+    logger.error("question = "+question);
+    logger.error("processingOption = "+processingOption);
+    //logger.error(e);
     throw e;
   }
 
@@ -2613,7 +2739,9 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
   await pollCol.insertOne(pollData);
 
   const pollID = pollData._id;
-  console.debug("New Poll:"+pollID)
+  logger.verbose("New Poll:"+pollID)
+  //logger.debug(pollData)
+  logger.debug("Poll CMD:"+cmd)
 
   button_value.poll_id = pollID;
 
@@ -3134,7 +3262,7 @@ async function myVotes(body, client, context) {
       }
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
   }
 }
 
@@ -3150,14 +3278,14 @@ async function usersVotes(body, client, context, value) {
     || !body.channel.id
     || !value
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
-    console.log('reject req because invalid user');
+    logger.info('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -3282,7 +3410,7 @@ async function usersVotes(body, client, context, value) {
       },
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
   }
 }
 
@@ -3321,12 +3449,12 @@ async function revealOrHideVotes(body, context, value) {
       && !body.message.blocks[menuAtIndex].accessory.option_groups
     )
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
 
   if (body.user.id !== value.user) {
-    console.log('reject req because invalid user');
+    logger.info('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -3340,7 +3468,7 @@ async function revealOrHideVotes(body, context, value) {
   }
 
   if (!value.hasOwnProperty('revealed')) {
-    console.log('Missing `revealed` information on poll');
+    logger.info('Missing `revealed` information on poll');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -3369,7 +3497,7 @@ async function revealOrHideVotes(body, context, value) {
     try {
       release = await mutexes[`${message.team}/${channel}/${message.ts}`].acquire();
     } catch (e) {
-      console.log(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+      logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
     }
   } while (!release && countTry < 3);
 
@@ -3442,7 +3570,7 @@ async function revealOrHideVotes(body, context, value) {
           hidden: isHidden,
         },
       });
-      //console.debug(blocks);
+      //logger.debug(blocks);
       for (const i in blocks) {
         let b = blocks[i];
         if (
@@ -3523,7 +3651,7 @@ async function revealOrHideVotes(body, context, value) {
       };
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -3558,14 +3686,14 @@ async function deletePoll(body, context, value) {
     || !body.channel.id
     || !value
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
-    console.log('reject req because invalid user');
+    logger.info('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -3626,12 +3754,12 @@ async function closePoll(body, client, context, value) {
     || !body.channel.id
     || !value
   ) {
-    console.log('error');
+    logger.info('error');
     return;
   }
 
   if (body.user.id !== value.user) {
-    console.log('reject req because invalid user');
+    logger.info('reject req because invalid user');
     let mRequestBody = {
       token: context.botToken,
           channel: body.channel.id,
@@ -3659,7 +3787,7 @@ async function closePoll(body, client, context, value) {
     try {
       release = await mutexes[`${message.team}/${channel}/${message.ts}`].acquire();
     } catch (e) {
-      console.log(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+      logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
     }
   } while (!release && countTry < 3);
 
@@ -3758,7 +3886,7 @@ async function closePoll(body, client, context, value) {
       };
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
