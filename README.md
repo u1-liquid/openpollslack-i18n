@@ -41,7 +41,15 @@ After adding the app to Slack, please use the `/poll config` command to configur
 
 If you didn't use any of these Feature you might want to use original App here [GitLab](https://gitlab.com/openpollslack/openpollslack).
 
-## Additional server config (config/default.json)
+## Team config (Override Server config)
+
+If some of your team would like to using different config than what is on default.json you can use `/poll config` .
+- this command only work on user who install app to Slack only
+- If app was re-add to workspace all Override config will be removed
+- 
+## Self-host: Server config (config/default.json)
+- `mongo_url`: the url to connect to your mongo database
+- `mongo_db_name`: your mongo database name (Main DB)
 - `app_lang` for translation (Please put language file in language folder), Translate some text to Thai (th-ภาษาไทย)
 - `app_lang_user_selectable` if set to `true`; Let user who create poll (Via Modal) select language of poll UI 
 - `use_response_url` if set to `true`; app will respond to request using `response_url` instead of using `app.client.chat.post`
@@ -59,12 +67,9 @@ If you didn't use any of these Feature you might want to use original App here [
 - `log_level_bolt` valid options are: `debug` `verbose` `info` `warn` `error`
 - `log_to_file` valid options are: `true` `false`
 - `log_dir` folder of log file
+- `schedule_limit_hrs` schedule will deny to re-run if schedule jobs is shorter than this number (hours)
 
-## Team config (Override Server config)
 
-If some of your team would like to using different config than what is on default.json you can use `/poll config` .
-- this command only work on user who install app to Slack only
-- If app was re-add to workspace all Override config will be removed
 
 Usage:
 ```

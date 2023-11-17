@@ -27,35 +27,8 @@ You have many way to run the app. Basically, you can use `node index.js`. But if
 - pm2 del ID to delete your app from pm2
 
 ### Configuration
-Inside the `config` folder, you have a `default.json.dist`. Copy it into `config/default.json`. Then, you need to edit the config values :
+Inside the `config` folder, you have a `default.json.dist`. Copy it into `config/default.json`. Then, you need to edit the config values (see [README.md](README.md#self-host-server-config-configdefaultjson) )
 
-- `port`: the port you will use to listen http requests. Can also be configured as environment variable (like PORT=5000 node index.js
-- `command`: the command name you want to use your poll inside slack
-- `help_link`: a link to provide help to use the poll
-- `client_id`: a value provided by slack (we will see it later)
-- `client_secret`: another value provided by slack (see later)
-- `signing_secret`: another value provided by slack again
-- `state_secret`: a secret state passed to slack. Please update it with random string or what you want.
-- `oauth_success`: at the end of oauth flow, to register your app in workspace, the user will be redirected to this page if the registration succeeds
-- `oauth_failure`: at the end of oauth flow, to register your app in workspace, the user will be redirected to this page if the registration failed
-- `app_lang` : for translation (Please put language file in language folder), Translate some text to Thai (th-ภาษาไทย)
-- `app_lang_user_selectable` : if set to `true`; Let user who create poll (Via Modal) select language of poll UI (Most of the UI text, some error and exception message might still in default app language )
-- `bot_name` : for refering bot name in some help text
-- `use_response_url` : if set to `true`; app will respond to request using `response_url` instead of using `app.client.chat.post`
-  so user will be able to create poll in private channel without adding bot to that channel (using /command or Modal that called by /command, but not via shortcut), But it might get timeout if user not response after Modal was created (click create poll) within slack time limit(30 minutes).
-- `create_via_cmd_only`  if set to `true` (available only if `use_response_url` is enabled) ; User will NOT able to create Poll using Shortcut; it will show `modal_ch_via_cmd_only` string to ask user to create poll via /command instead.
-- `menu_at_the_end` : if set to `true`; Rearrange Menu to the end of poll so no more big menu btn between question and answer when using smartphone
-- `add_number_emoji_to_choice` and `add_number_emoji_to_choice_btn` : if set to `true`; Number emoji (customizeable) will show in the vote option text / button
-- `compact_ui` if set to `true`; Choice text will compact to voter name
-- `show_divider` if set to `false`; Poll will be more compact (divider between choice will be removed)
-- `show_help_link` : if set to `false`; help link will be removed from poll
-- `show_command_info` : if set to `false`; command that use to create poll will be removed (You still can see command in Menu)
-- `true_anonymous` if set to `true`; Poller will no longer see who voted which options if poll is anonymous, If this mode is disabled; `info_anonymous_notice` will show to let users know that poller can still see there votes
-- `delete_data_on_poll_delete` if set to `true`; When poller request to delete the poll, all data in database that refer to that poll will be deleted. If you want to disable it please make sure if compliance with your policy.
-- `log_level_app` valid options are: `debug` `verbose` `info` `warn` `error`
-- `log_level_bolt` valid options are: `debug` `verbose` `info` `warn` `error`
-- `log_to_file` valid options are: `true` `false`
-- `log_dir` folder of log file
 
 ### Create an app into slack
 To use the poll in slack workspace, you need to create an app into slack. Go to this page : https://api.slack.com/apps and click on `Create New App`. Fill the fields :

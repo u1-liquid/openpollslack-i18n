@@ -12,6 +12,9 @@ const fileLang = require('node:fs');
 //const globLang = require('glob');
 const {globSync} = require("glob");
 
+const cron = require('node-cron');
+const cronParser = require('cron-parser');
+
 const { createLogger, format, transports } = require('winston');
 const fs = require('fs');
 const path = require('path');
@@ -44,6 +47,7 @@ const gIsDeleteDataOnRequest = config.get('delete_data_on_poll_delete');
 const gLogLevelApp = config.get('log_level_app');
 const gLogLevelBolt = config.get('log_level_bolt');
 const gLogToFile = config.get('log_to_file');
+const scheduleLimitHr = config.get('schedule_limit_hrs');
 
 const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete"];
 
@@ -53,6 +57,7 @@ let votesCol = null;
 let closedCol = null;
 let hiddenCol = null;
 let pollCol = null;
+let scheduleCol = null;
 
 let migrations = null;
 
@@ -61,9 +66,12 @@ const mutexes = {};
 console.log('Init Logger..');
 
 const prettyJson = format.printf(info => {
-  if (info.message.constructor === Object) {
-    info.message = JSON.stringify(info.message, null, 4)
+  try {
+    if (info.message.constructor === Object) {
+      info.message = JSON.stringify(info.message, null, 4)
+    }
   }
+  catch (e) { }
   return `${info.timestamp} ${info.level}: ${info.message}`
 })
 
@@ -177,11 +185,13 @@ try {
   closedCol = db.collection('closed');
   hiddenCol = db.collection('hidden');
   pollCol = db.collection('poll_data');
+  scheduleCol = db.collection('poll_schedule');
 
   migrations = new Migrations(db);
 } catch (e) {
   client.close();
   logger.error(e)
+  console.log(e);
   process.exit();
 }
 
@@ -193,6 +203,7 @@ const createDBIndex = async () => {
   closedCol.createIndex({ channel: 1, ts: 1 });
   hiddenCol.createIndex({ channel: 1, ts: 1 });
   pollCol.createIndex({ channel: 1, ts: 1 });
+  scheduleCol.createIndex({ poll_id: 1, next_ts: 1  });
 }
 
 let langCount = 0;
@@ -225,6 +236,116 @@ if(!langDict.hasOwnProperty(gAppLang)) {
   logger.error(`language/${gAppLang}.json NOT FOUND!`);
   throw new Error(`language/${gAppLang}.json NOT FOUND!`);
 }
+
+logger.info('Init cron jobs...');
+
+function calculateNextScheduleTime(cronString) {
+  try {
+    const interval = cronParser.parseExpression(cronString);
+    return interval.next().toDate();
+  } catch (error) {
+    return null;
+  }
+}
+const checkAndExecuteTasks = async () => {
+  try {
+    const currentDateTime = new Date();
+    const pendingTasks = await scheduleCol.find({
+      next_ts: { $lte: currentDateTime },
+      is_done: false,
+    }).toArray();
+
+    for (const task of pendingTasks) {
+      logger.debug(`processing poll_id: ${task.poll_id}.`);
+      let calObjId = null;
+      let pollData = null;
+      try {
+        calObjId = new ObjectId(task.poll_id);
+        pollData = await pollCol.findOne({ _id: calObjId  });
+      }
+      catch (e) { }
+
+
+      if (!pollData) {
+        logger.error(`Invalid task with poll_id: ${task.poll_id}. Poll not found.`);
+        // Delete the invalid task from scheduleCol
+        await scheduleCol.deleteOne({ _id: task._id });
+        continue; // Skip this task and move to the next one
+      }
+
+      logger.verbose(`Executing task for poll_id: ${task.poll_id}`);
+      // Perform the task here
+
+      // Update is_done to true
+      await scheduleCol.updateOne(
+          { _id: task._id },
+          { $set: { is_done: true } }
+      );
+
+
+      if (task.cron_string) {
+        // Calculate the next schedule time
+        const nextScheduleTime = calculateNextScheduleTime(task.cron_string);
+
+        if (!nextScheduleTime) {
+          console.error(`Error parsing cron_string for poll_id ${task.poll_id} and cron_string ${task.cron_string}`);
+          // Set cron_string to null when it's invalid
+          await scheduleCol.updateOne(
+              { _id: task._id },
+              { $set: { cron_string: null } }
+          );
+          continue; // Skip this task and move to the next one
+        }
+
+        // Check if the task is scheduled within the scheduleLimitHr
+        const timeDifferenceHr = (nextScheduleTime - currentDateTime) / (1000 * 60 * 60);
+        let nextScheduleValid = false;
+        if (timeDifferenceHr < scheduleLimitHr) {
+          // Check if next_ts_warn is false or null or not set
+          if (!task.next_ts_warn) {
+            logger.warn(`${task.poll_id} First scheduled job and next one is less than ${scheduleLimitHr} hours.`);
+            // Set next_ts_warn to true
+            await scheduleCol.updateOne(
+                { _id: task._id },
+                { $set: { next_ts_warn: true } }
+            );
+            nextScheduleValid = true;
+          } else {
+            logger.error(`${task.poll_id} Scheduled job is less than ${scheduleLimitHr} hours.`);
+            // Set next_ts_warn to false and cron_string to null
+            await scheduleCol.updateOne(
+                { _id: task._id },
+                { $set: { next_ts_warn: false, cron_string: null } }
+            );
+          }
+        }
+        else {
+          nextScheduleValid = true;
+        }
+
+        if(nextScheduleValid) {
+          // Set the next_ts to the next schedule time and reset is_done to false
+          await scheduleCol.updateOne(
+              { _id: task._id },
+              { $set: { next_ts: nextScheduleTime, is_done: false } }
+          );
+        }
+
+      }//end cron_string
+
+    }
+  } catch (e) {
+    logger.error(e);
+    console.log(e);
+  }
+};
+
+// Schedule the task checker to run every minute (you can adjust the schedule)
+cron.schedule('* * * * *', checkAndExecuteTasks);
+
+// Start the task checker immediately
+checkAndExecuteTasks();
+///
 
 const parameterizedString = (str,varArray) => {
   if(str==undefined) str = `MissingStr`;
@@ -388,7 +509,8 @@ const receiver = new ExpressReceiver({
         try {
           return await orgCol.findOne({ 'enterprise.id': mTeamId });
         } catch (e) {
-          logger.error(e)
+          logger.error(e);
+          console.log(e);
           throw new Error('No matching authorizations');
         }
 
@@ -400,7 +522,8 @@ const receiver = new ExpressReceiver({
         try {
           return await orgCol.findOne({ 'team.id': mTeamId });
         } catch (e) {
-          logger.error(e)
+          logger.error(e);
+          console.log(e);
           throw new Error('No matching authorizations');
         }
       }
@@ -766,6 +889,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
     });
   } catch (error) {
     logger.error(error);
+    console.log(error);
   }
 });
 
@@ -990,6 +1114,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     let limit = null;
     let isHidden = false;
     let isAllowUserAddChoice = false;
+    let isSchedule = false;
     let fetchArgs = true;
 
     while (fetchArgs) {
@@ -998,6 +1123,34 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         fetchArgs = true;
         isAnonymous = true;
         cmdBody = cmdBody.substring(9).trim();
+      }
+      if (cmdBody.startsWith('schedule')) {
+        isSchedule = true;
+        cmdBody = cmdBody.substring(8).trim();
+
+        if(isSchedule) {
+
+          const dataToInsert = {
+            poll_id: '6557399cf90f737c68064da6',
+            next_ts: new Date('2023-11-17T21:54:00'),
+            is_done: false,
+            cron_string: "0 0 * * * *",
+          };
+
+          // Insert the data into scheduleCol
+          await scheduleCol.insertOne(dataToInsert);
+
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: "Not implemented: isSchedule (TEST CODE)"
+            ,
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+        }
+
       } else if (cmdBody.startsWith('limit')) {
         fetchArgs = true;
         cmdBody = cmdBody.substring(5).trim();
@@ -1166,6 +1319,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           }
           catch (e) {
               logger.error(e);
+              console.log(e);
               let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
@@ -1245,6 +1399,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       await postChat(body.response_url,'ephemeral',mRequestBody);
       return;
     }
+
 
     const blocks = await createPollView(channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
 
@@ -1430,6 +1585,7 @@ app.action('btn_my_votes', async ({ ack, body, client, context }) => {
     });
   } catch (e) {
     logger.error(e);
+    console.log(e);
   }
 });
 
@@ -1799,6 +1955,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
       logger.error(e);
+      console.log(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -2004,6 +2161,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
 
     } catch (e) {
       logger.error(e);
+      console.log(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -2376,6 +2534,7 @@ async function createModal(context, client, trigger_id,response_url) {
     });
   } catch (error) {
     logger.error(error);
+    console.log(error);
   }
 }
 
@@ -2603,6 +2762,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   catch (e)
   {
     logger.error(e);
+    console.log(e);
     let mRequestBody = {
       token: context.botToken,
       channel: channel,
@@ -3263,6 +3423,7 @@ async function myVotes(body, client, context) {
     });
   } catch (e) {
     logger.error(e);
+    console.log(e);
   }
 }
 
@@ -3411,6 +3572,7 @@ async function usersVotes(body, client, context, value) {
     });
   } catch (e) {
     logger.error(e);
+    console.log(e);
   }
 }
 
@@ -3652,6 +3814,7 @@ async function revealOrHideVotes(body, context, value) {
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
       logger.error(e);
+      console.log(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -3887,6 +4050,7 @@ async function closePoll(body, client, context, value) {
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
       logger.error(e);
+      console.log(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
