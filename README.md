@@ -27,6 +27,8 @@ I have made some changes to make it more customizable, such as:
 - Separate configuration for each Slack team
 - Better error handling to prevent crashes on the server
 
+NOTE: you make found schedule/recurring poll feature in sourecode. **_this is in-devlopment/testing feature_**, so it won't work as you expect(for now).
+
 (Please see detail below)
 
 ### If I just want to use it without self-host?
@@ -46,7 +48,24 @@ If you didn't use any of these Feature you might want to use original App here [
 If some of your team would like to using different config than what is on default.json you can use `/poll config` .
 - this command only work on user who install app to Slack only
 - If app was re-add to workspace all Override config will be removed
-- 
+
+Usage:
+```
+/poll config read
+/poll config write app_lang [zh_tw/zh_cn/th/ru/kr/jp/fr/es/en/de/(or language file)]
+/poll config write app_lang_user_selectable [true/false]
+/poll config write menu_at_the_end [true/false]
+/poll config write create_via_cmd_only [true/false]
+/poll config write compact_ui [true/false]
+/poll config write show_divider [true/false]
+/poll config write show_help_link [true/false]
+/poll config write show_command_info [true/false]
+/poll config write true_anonymous [true/false]
+/poll config write add_number_emoji_to_choice [true/false]
+/poll config write add_number_emoji_to_choice_btn [true/false]
+/poll config write delete_data_on_poll_delete [true/false]
+```
+
 ## Self-host: Server config (config/default.json)
 - `mongo_url`: the url to connect to your mongo database
 - `mongo_db_name`: your mongo database name (Main DB)
@@ -68,25 +87,6 @@ If some of your team would like to using different config than what is on defaul
 - `log_to_file` valid options are: `true` `false`
 - `log_dir` folder of log file
 - `schedule_limit_hrs` schedule will deny to re-run if schedule jobs is shorter than this number (hours)
-
-
-
-Usage:
-```
-/poll config read
-/poll config write app_lang [zh_tw/zh_cn/th/ru/kr/jp/fr/es/en/de/(or language file)]
-/poll config write app_lang_user_selectable [true/false]
-/poll config write menu_at_the_end [true/false]
-/poll config write create_via_cmd_only [true/false]
-/poll config write compact_ui [true/false]
-/poll config write show_divider [true/false]
-/poll config write show_help_link [true/false]
-/poll config write show_command_info [true/false]
-/poll config write true_anonymous [true/false]
-/poll config write add_number_emoji_to_choice [true/false]
-/poll config write add_number_emoji_to_choice_btn [true/false]
-/poll config write delete_data_on_poll_delete [true/false]
-```
 
 ## Example
 
