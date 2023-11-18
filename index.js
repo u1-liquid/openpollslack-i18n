@@ -71,7 +71,12 @@ const prettyJson = format.printf(info => {
       info.message = JSON.stringify(info.message, null, 4)
     }
   }
-  catch (e) { }
+  catch (e) {
+    console.error(e);
+    console.error(info);
+    info.message = JSON.stringify(info, null, 4)
+    return `${info.timestamp} ${info.level}: ${info.message}`
+  }
   return `${info.timestamp} ${info.level}: ${info.message}`
 })
 
@@ -256,25 +261,79 @@ const checkAndExecuteTasks = async () => {
     }).toArray();
 
     for (const task of pendingTasks) {
-      logger.debug(`processing poll_id: ${task.poll_id}.`);
+      logger.debug(`[Task] processing poll_id: ${task.poll_id}.`);
       let calObjId = null;
       let pollData = null;
+      let pollCh = null;
       try {
         calObjId = new ObjectId(task.poll_id);
         pollData = await pollCol.findOne({ _id: calObjId  });
       }
       catch (e) { }
 
-
+      let isPollValid = true;
+      let mBotToken = null;
       if (!pollData) {
-        logger.error(`Invalid task with poll_id: ${task.poll_id}. Poll not found.`);
-        // Delete the invalid task from scheduleCol
-        await scheduleCol.deleteOne({ _id: task._id });
-        continue; // Skip this task and move to the next one
+        isPollValid = false;
+      }
+      else
+      {
+        // Perform poll info checking
+        if(pollData.hasOwnProperty('team') && pollData.hasOwnProperty('channel')) {
+          if(pollData.team != "" && pollData.team != null &&
+              pollData.channel != "" && pollData.channel != null
+          ) {
+            //get req info to run task
+            const teamInfo = await getTeamInfo(pollData.team);
+            //logger.debug("Got team info:");
+            //logger.debug(teamInfo);
+            if(teamInfo?.bot?.token !== undefined) {
+              mBotToken = teamInfo.bot.token;
+              pollCh = pollData.channel;
+            } else {
+              logger.error(`[Task] poll_id: ${task.poll_id}: Unable to get valid bot token.`);
+
+            }
+
+
+          } else {
+            logger.error(`[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`);
+            isPollValid = false;
+          }
+        } else {
+          logger.error(`[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`);
+          isPollValid = false;
+        }
+
+        if(!isPollValid) {
+          logger.error(`[Task] poll_id: ${task.poll_id}: Delete invalid task from DB.`);
+          // Delete the invalid task from scheduleCol
+          await scheduleCol.deleteOne({ _id: task._id });
+          continue; // Skip this task and move to the next one
+        }
+
+
+        if(task.hasOwnProperty('poll_ch')) {
+          if(task.poll_ch != "" && task.poll_ch != null ) {
+            pollCh = task.poll_ch;
+          }
+        }
+
+        logger.verbose(`[Task] Executing task for poll_id: ${task.poll_id} to CH:${pollCh}`);
+        let mRequestBody = {
+          token: mBotToken,
+          channel: pollCh,
+          //blocks: blocks,
+          text: `TEST TASK ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`
+          ,
+        };
+        logger.debug(mRequestBody);
+        await postChat("",'post',mRequestBody);
+
+
       }
 
-      logger.verbose(`Executing task for poll_id: ${task.poll_id}`);
-      // Perform the task here
+
 
       // Update is_done to true
       await scheduleCol.updateOne(
@@ -288,7 +347,7 @@ const checkAndExecuteTasks = async () => {
         const nextScheduleTime = calculateNextScheduleTime(task.cron_string);
 
         if (!nextScheduleTime) {
-          console.error(`Error parsing cron_string for poll_id ${task.poll_id} and cron_string ${task.cron_string}`);
+          console.error(`[Task] Error parsing cron_string for poll_id ${task.poll_id} and cron_string ${task.cron_string}`);
           // Set cron_string to null when it's invalid
           await scheduleCol.updateOne(
               { _id: task._id },
@@ -303,7 +362,7 @@ const checkAndExecuteTasks = async () => {
         if (timeDifferenceHr < scheduleLimitHr) {
           // Check if next_ts_warn is false or null or not set
           if (!task.next_ts_warn) {
-            logger.warn(`${task.poll_id} First scheduled job and next one is less than ${scheduleLimitHr} hours.`);
+            logger.warn(`[Task] ${task.poll_id} First scheduled job and next one is less than ${scheduleLimitHr} hours.`);
             // Set next_ts_warn to true
             await scheduleCol.updateOne(
                 { _id: task._id },
@@ -311,7 +370,7 @@ const checkAndExecuteTasks = async () => {
             );
             nextScheduleValid = true;
           } else {
-            logger.error(`${task.poll_id} Scheduled job is less than ${scheduleLimitHr} hours.`);
+            logger.error(`[Task] ${task.poll_id} Scheduled job is less than ${scheduleLimitHr} hours. Disable job.`);
             // Set next_ts_warn to false and cron_string to null
             await scheduleCol.updateOne(
                 { _id: task._id },
@@ -336,16 +395,9 @@ const checkAndExecuteTasks = async () => {
     }
   } catch (e) {
     logger.error(e);
-    console.log(e);
   }
 };
 
-// Schedule the task checker to run every minute (you can adjust the schedule)
-cron.schedule('* * * * *', checkAndExecuteTasks);
-
-// Start the task checker immediately
-checkAndExecuteTasks();
-///
 
 const parameterizedString = (str,varArray) => {
   if(str==undefined) str = `MissingStr`;
@@ -377,39 +429,63 @@ function getTeamOrEnterpriseId (body) {
   body = JSON.parse(JSON.stringify(body));
   //logger.debug(body);
   if(body.hasOwnProperty('isEnterpriseInstall')) {
-    if(body.isEnterpriseInstall=='false' || body.isEnterpriseInstall == false) return body.teamId;
-    else return body.enterpriseId;
-  }
-  else if(body.hasOwnProperty('is_enterprise_install')) {
-    if(body.is_enterprise_install=='false' || body.is_enterprise_install == false ) {
-      if(body.hasOwnProperty('team_id')) return body.team_id;
-      else return body.team.id;
+    if(body.isEnterpriseInstall=='true' || body.isEnterpriseInstall == true) {
+      if(body.hasOwnProperty('enterprise_id')) return body.enterprise_id;
+      else if(body.hasOwnProperty('enterpriseId')) return body.enterpriseId;
+      else if(body?.enterprise?.id !== undefined) return body.enterprise.id;
     }
     else {
+      if(body.hasOwnProperty('team_id')) return body.team_id;
+      else if(body.hasOwnProperty('teamId')) return body.teamId;
+      else if(body?.team?.id !== undefined) return body.team.id;
+    }
+  }
+  else if(body.hasOwnProperty('is_enterprise_install')) {
+    if(body.is_enterprise_install=='true' || body.is_enterprise_install == true ) {
       if(body.hasOwnProperty('enterprise_id')) return body.enterprise_id;
-      return body.enterprise.id;
+      else if(body.hasOwnProperty('enterpriseId')) return body.enterpriseId;
+      else if(body?.enterprise?.id !== undefined) return body.enterprise.id;
+    }
+    else {
+      if(body.hasOwnProperty('team_id')) return body.team_id;
+      else if(body.hasOwnProperty('teamId')) return body.teamId;
+      else if(body?.team?.id !== undefined) return body.team.id;
     }
   }
   else
   {
     if(body.hasOwnProperty('enterprise_id')) return body.enterprise_id;
+    else if(body.hasOwnProperty('enterpriseId')) return body.enterpriseId;
+    else if(body?.enterprise?.id !== undefined) return body.enterprise.id;
     else if(body.hasOwnProperty('team_id')) return body.team_id;
+    else if(body.hasOwnProperty('teamId')) return body.teamId;
+    else if(body?.team?.id !== undefined) return body.team.id;
   }
   return null;
 }
 
+const getTeamInfo = async (mTeamId) => {
+  let ret = {};
+  try {
+    ret = await orgCol.findOne(
+        {
+          $or: [
+            {'team.id': mTeamId},
+            {'enterprise.id': mTeamId},
+          ]
+        }
+    );
+  }
+  catch (e) {
+
+  }
+  return ret;
+}
 const getTeamOverride  = async (mTeamId) => {
     let ret = {};
     try {
         //const team = await orgCol.findOne({ 'team.id': mTeamId });
-        const team = await orgCol.findOne(
-            {
-              $or: [
-                {'team.id': mTeamId},
-                {'enterprise.id': mTeamId},
-              ]
-            }
-        );
+        const team = await getTeamInfo(mTeamId);
         if (team) {
             if(team.hasOwnProperty("openPollConfig")) ret = team.openPollConfig;
         }
@@ -510,7 +586,6 @@ const receiver = new ExpressReceiver({
           return await orgCol.findOne({ 'enterprise.id': mTeamId });
         } catch (e) {
           logger.error(e);
-          console.log(e);
           throw new Error('No matching authorizations');
         }
 
@@ -523,7 +598,6 @@ const receiver = new ExpressReceiver({
           return await orgCol.findOne({ 'team.id': mTeamId });
         } catch (e) {
           logger.error(e);
-          console.log(e);
           throw new Error('No matching authorizations');
         }
       }
@@ -550,62 +624,84 @@ const sendMessageUsingUrl = async (url,newMessage) => {
 }
 
 const postChat = async (url,type,requestBody) => {
-  if(isUseResponseUrl && url!=undefined && url!="")
-  {
-    delete requestBody['token'];
-    delete requestBody['channel'];
-    delete requestBody['user'];
-    switch (type) {
-      case "post":
-        requestBody['response_type'] = 'in_channel';
-        requestBody['replace_original'] = false;
-        break;
-      case "update":
-        requestBody['response_type'] = 'in_channel';
-        requestBody['replace_original'] = true;
-        break;
-      case "ephemeral":
-        requestBody['response_type'] = 'ephemeral';
-        requestBody['replace_original'] = false;
-        break;
-      case "delete":
-        requestBody['delete_original'] = true;
-        break;
-      default:
-        logger.error("Invalid post type:"+type);
-        return;
-    }
-    await sendMessageUsingUrl(url,requestBody);
-  }
-  else
-  {
-    try {
+  let ret = {status:false,message : "N/A"};
+  try {
+    if(isUseResponseUrl && url!=undefined && url!="")
+    {
+      delete requestBody['token'];
+      delete requestBody['channel'];
+      delete requestBody['user'];
       switch (type) {
         case "post":
-          await app.client.chat.postMessage(requestBody);
+          requestBody['response_type'] = 'in_channel';
+          requestBody['replace_original'] = false;
           break;
         case "update":
-          await app.client.chat.update(requestBody);
+          requestBody['response_type'] = 'in_channel';
+          requestBody['replace_original'] = true;
           break;
         case "ephemeral":
-          await app.client.chat.postEphemeral(requestBody);
+          requestBody['response_type'] = 'ephemeral';
+          requestBody['replace_original'] = false;
           break;
         case "delete":
-          await app.client.chat.delete(requestBody);
+          requestBody['delete_original'] = true;
           break;
         default:
-          logger.error("Invalid post type:"+type)
-          return;
+          logger.error("Invalid post type:"+type);
+          ret.status = false;
+          ret.message = "Invalid post type:"+type;
+          return ret;
       }
-    } catch (e) {
-      if (
-          e && e.data && e.data && e.data.error
-          && 'channel_not_found' === e.data.error
-      ) {
-        logger.error('Channel not found error : ignored')
-      }
+      await sendMessageUsingUrl(url,requestBody);
     }
+    else
+    {
+
+        switch (type) {
+          case "post":
+            await app.client.chat.postMessage(requestBody);
+            break;
+          case "update":
+            await app.client.chat.update(requestBody);
+            break;
+          case "ephemeral":
+            await app.client.chat.postEphemeral(requestBody);
+            break;
+          case "delete":
+            await app.client.chat.delete(requestBody);
+            break;
+          default:
+            logger.error("Invalid post type:"+type)
+            ret.status = false;
+            ret.message = "Invalid post type:"+type;
+            return ret;
+        }
+
+    }
+  } catch (e) {
+    if (
+        e && e.data && e.data && e.data.error
+        && 'channel_not_found' === e.data.error
+    ) {
+      logger.error('Channel not found error : ignored');
+      ret.message = "Channel not found error : ignored";
+    }
+    else if (
+        e && e.data && e.data && e.data.error
+        && 'team_not_found' === e.data.error
+    ) {
+      logger.error('Team not found error : ignored');
+      ret.message = "Team not found error : ignored";
+    } else {
+      logger.error(e);
+      ret.message = "Unknown error";
+    }
+    ret.status = false;
+    return false;
   }
+  ret.status = true;
+  return ret;
 }
 
 const slackNumToEmoji = (seq,userLang) => {
@@ -889,7 +985,6 @@ app.event('app_home_opened', async ({ event, client, context }) => {
     });
   } catch (error) {
     logger.error(error);
-    console.log(error);
   }
 });
 
@@ -904,7 +999,8 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
 
   const userId = (command && command.user_id) ? command.user_id : null;
 
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+  const teamOrEntId = getTeamOrEnterpriseId(context);
+  const teamConfig = await getTeamOverride(teamOrEntId);
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
@@ -1102,7 +1198,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     await postChat(body.response_url,'ephemeral',mRequestBody);
     return;
   } else if (!cmdBody) {
-    createModal(context, client, body.trigger_id,body.response_url);
+    createModal(context, client, body.trigger_id,body.response_url,channel);
   } else {
     const cmd = `/${slackCommand} ${cmdBody}`;
     let question = null;
@@ -1123,18 +1219,21 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         fetchArgs = true;
         isAnonymous = true;
         cmdBody = cmdBody.substring(9).trim();
-      }
-      if (cmdBody.startsWith('schedule')) {
+      } else if (cmdBody.startsWith('schedule')) {
         isSchedule = true;
         cmdBody = cmdBody.substring(8).trim();
 
+        let schPollID = cmdBody;
+        let schCH = null;
+        let schCron = "0 */5 * * * *";
         if(isSchedule) {
 
           const dataToInsert = {
-            poll_id: '6557399cf90f737c68064da6',
-            next_ts: new Date('2023-11-17T21:54:00'),
+            poll_id: schPollID,
+            next_ts: new Date('2023-11-17T21:54:00+'),
             is_done: false,
-            cron_string: "0 0 * * * *",
+            poll_ch: schCH,
+            cron_string: schCron,
           };
 
           // Insert the data into scheduleCol
@@ -1144,12 +1243,35 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             token: context.botToken,
             channel: channel,
             //blocks: blocks,
-            text: "Not implemented: isSchedule (TEST CODE)"
+            text: `Poll ID: ${schPollID} scheduled`
             ,
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
+
+          logger.verbose(`[Task] New schedule, Poll ID: ${schPollID}`);
+
           return;
         }
+
+      } else if (cmdBody.startsWith('test')) {
+        //test functiom
+        logger.debug(context);
+        cmdBody = cmdBody.substring(4).trim();
+        let teamId = getTeamOrEnterpriseId (context);
+        logger.debug("TeamID:"+teamId);
+
+
+        let mRequestBody = {
+          token: context.botToken,
+          channel: cmdBody,
+          //blocks: blocks,
+          text: `TEST MSG TO ${cmdBody} from ${userId}`
+          ,
+        };
+        logger.debug(mRequestBody);
+        await postChat("",'post',mRequestBody);
+        return;
+
 
       } else if (cmdBody.startsWith('limit')) {
         fetchArgs = true;
@@ -1195,7 +1317,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
 
         validWritePara +=  '\n'+parameterizedString(stri18n(userLang, 'info_need_help'), {email: helpEmail,link:helpLink});
         //validWritePara += `\n${helpEmail}\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
-        let teamOrEntId = getTeamOrEnterpriseId(body);
+        //let teamOrEntId = getTeamOrEnterpriseId(context);
         let team = await orgCol.findOne(
             {
               $or: [
@@ -1319,7 +1441,6 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           }
           catch (e) {
               logger.error(e);
-              console.log(e);
               let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
@@ -1401,7 +1522,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     }
 
 
-    const blocks = await createPollView(channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
+    const blocks = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
 
 
     if (null === blocks) {
@@ -1447,6 +1568,14 @@ const createModalBlockInput = (userLang)  => {
   await app.start(process.env.PORT || port);
 
   logger.info('Bolt app is running!');
+
+  logger.info('Check and start cron jobs.');
+  // Schedule the task checker to run every minute (you can adjust the schedule)
+  cron.schedule('* * * * *', checkAndExecuteTasks);
+
+  // Start the task checker immediately
+  checkAndExecuteTasks();
+
 })();
 
 app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
@@ -1585,7 +1714,6 @@ app.action('btn_my_votes', async ({ ack, body, client, context }) => {
     });
   } catch (e) {
     logger.error(e);
-    console.log(e);
   }
 });
 
@@ -1955,7 +2083,6 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
       logger.error(e);
-      console.log(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -2161,7 +2288,6 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
 
     } catch (e) {
       logger.error(e);
-      console.log(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -2184,7 +2310,7 @@ app.shortcut('open_modal_new', async ({ shortcut, ack, context, client }) => {
   createModal(context, client, shortcut.trigger_id);
 });
 
-async function createModal(context, client, trigger_id,response_url) {
+async function createModal(context, client, trigger_id,response_url,channel) {
   try {
     const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(context));
     let appLang= gAppLang;
@@ -2219,7 +2345,7 @@ async function createModal(context, client, trigger_id,response_url) {
       add_number_emoji_to_choice: isShowNumberInChoice,
       add_number_emoji_to_choice_btn: isShowNumberInChoiceBtn,
       response_url: response_url,
-      channel: null,
+      channel: channel,
     };
 
     if( isUseResponseUrl && (response_url== "" || response_url==undefined) && isViaCmdOnly) {
@@ -2534,7 +2660,6 @@ async function createModal(context, client, trigger_id,response_url) {
     });
   } catch (error) {
     logger.error(error);
-    console.log(error);
   }
 }
 
@@ -2682,7 +2807,8 @@ app.action('modal_poll_options', async ({ action, ack, body, client, context }) 
 app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   if(!isUseResponseUrl) await ack();
   else await ack();
-
+  // logger.silly(body);
+  // logger.silly(context);
   if (
     !view
     || !body
@@ -2694,7 +2820,8 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   ) {
     return;
   }
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+  const teamOrEntId = getTeamOrEnterpriseId(context);
+  const teamConfig = await getTeamOverride(teamOrEntId);
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const privateMetadata = JSON.parse(view.private_metadata);
@@ -2762,7 +2889,6 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   catch (e)
   {
     logger.error(e);
-    console.log(e);
     let mRequestBody = {
       token: context.botToken,
       channel: channel,
@@ -2799,7 +2925,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   if(privateMetadata.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = privateMetadata.add_number_emoji_to_choice_btn;
   else if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
 
-  const blocks = await createPollView(channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
+  const blocks = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
 
   let mRequestBody = {
     token: context.botToken,
@@ -2856,7 +2982,7 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   return cmd;
 }
 
-async function createPollView(channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd) {
+async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd) {
   if (
     !question
     || !options
@@ -2885,7 +3011,7 @@ async function createPollView(channel, question, options, isAnonymous, isLimited
   };
 
   const pollData = {
-    team: null,
+    team: teamOrEntId,
     channel,
     ts: null,
     created_ts: new Date(),
@@ -3423,7 +3549,6 @@ async function myVotes(body, client, context) {
     });
   } catch (e) {
     logger.error(e);
-    console.log(e);
   }
 }
 
@@ -3572,7 +3697,6 @@ async function usersVotes(body, client, context, value) {
     });
   } catch (e) {
     logger.error(e);
-    console.log(e);
   }
 }
 
@@ -3814,7 +3938,6 @@ async function revealOrHideVotes(body, context, value) {
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
       logger.error(e);
-      console.log(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -4050,7 +4173,6 @@ async function closePoll(body, client, context, value) {
       await postChat(body.response_url,'update',mRequestBody);
     } catch (e) {
       logger.error(e);
-      console.log(e);
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,

@@ -14,7 +14,7 @@
   "compact_ui": true,
   "show_divider": true,
   "show_help_link": true,
-  "show_command_info": true,
+  "show_command_info": false,
   "true_anonymous": true,
   "client_id": "",
   "client_secret": "",

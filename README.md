@@ -22,10 +22,11 @@ I have made some changes to make it more customizable, such as:
 - Allowing choices to be added by others
 - True anonymous voting (Poller can't see users' votes if this mode is ON): Default ON
 - Supporting Slack's Enterprise Grid and Slack Connect
-- Customizable UI (Order, Show/Hide Elements you don't want to make it cleaner)
+- Customizable UI (Order, Show/Hide elements you don't want to make it cleaner)
 - UI Language, multiple language support (Please feel free to report any mistranslations)
 - Separate configuration for each Slack team
 - Better error handling to prevent crashes on the server
+- Log to file
 
 NOTE: you make found schedule/recurring poll feature in sourecode. **_this is in-devlopment/testing feature_**, so it won't work as you expect(for now).
 
@@ -108,57 +109,9 @@ Usage:
 
  ![Alt text](./assets/UI-emoji.png?raw=true "UI-Emoji")
 
-- You also can add notice to user when anonymous was used (since creator still can see their votes) by add text you want in `info_anonymous_notice` of language file 
+- If `true_anonymous` is set to `false`, You also can add notice to user when anonymous is created (since creator still can see their votes) by add text you want in `info_anonymous_notice` of language file 
 
  ![Alt text](./assets/poll-anonymous-note.png?raw=true "poll-anonymous-note")
-## Additional Permissions
-
-`channels:read`,`groups:read`,`mpim:read` : to check if bot in selected channel (if not using `response_url`)
-## Command usages
-### Allow choices add by others
-```
-/poll add-choice "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
-```
-
-### Change poll language for current poll only
-```
-/poll lang th "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
-```
-
-# Open source poll for Slack
-
-Welcome to the open source poll for Slack.  
-This repository is hosted on [GitLab](https://gitlab.com/openpollslack/openpollslack). [Github repository](https://github.com/KazuAlex/openpollslack) is only a mirror.  
-But feel free to open new issues on both.  
-
-## Important update
-
-If you have an error when submitting poll, please use the "Add to slack" button [on site](https://siamhos.com/openpollplus/index_plus.html) to re-authorize the bot on your workspace
-
-### Migrate to v3
-
-To upgrade to v3, you need to have a mongo database.  
-Setup your `config/default.json` with new database url and database name:
-- `mongo_url`: the url to connect to your mongo database
-- `mongo_db_name`: your mongo database name
-
-After that, migrate your old database to the mongo with the script:  
-At the root directory, run `./scripts/migrate-v3.sh [MONGO_URL] [MONGO_DB_NAME]`  
-Replace `[MONGO_URL]` by the same `mongo_url` and `[MONGO_DB_NAME]` with the same `mongo_db_name` set in your `config/default.json`.  
-As an example, with the default data from `config/default.json.dist`, the command line to migrate is:
-```
-./scripts/migrate-v3.sh mongodb://localhost:27017 open_poll
-```
-
-## License
-
-The code is under GNU GPL license. So, you are free to modify the code and redistribute it under same license.  
-  
-Remember the four freedoms of the GPL :  
-> the freedom to use the software for any purpose,
-> * the freedom to change the software to suit your needs,
-> * the freedom to share the software with your friends and neighbors, and
-> * the freedom to share the changes you make.
 
 ## Command usages
 
@@ -197,14 +150,50 @@ Remember the four freedoms of the GPL :
 ```
 /poll lang th "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
-  
-For both question and choices, feel free to use Slack's emoji, `*bold*` `~strike~` `_italics_` and `` `code` ``  
+
+### Allow choices add by others
+```
+/poll add-choice "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
+```
+
+### Change poll language for current poll only
+```
+/poll lang th "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
+```
+
+### ~~Schedule, Recurring Poll (WIP)~~
+```
+/poll schedule [poll_id] [TS] [CH_ID] [CRON_EXP]
+```
+- `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`)
+- `TS` = Time stamp of first run (ISO 8601, eg. `2023-11-17T21:54:00+07:00`)
+- `CH_ID` = empty to post to orginal channel that poll was created (eg. `A0123456`)
+- `CRON_EXP` = empty for run once, or put [cron expression](https://www.npmjs.com/package/cron-parser#supported-format) here (eg. `0 30 12 15 * *` , Post poll 12:30 PM on the 15th day of every month)
+- - "NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
+
+For both question and choices, feel free to use Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` ``  
 
 ## Self hosted installation
 
 - [self_host.md](self_host.md)
 - [webpage.md](webpage.md)
 - [apache-ssl.md](apache-ssl.md)
+
+## Additional Permissions
+
+`channels:read`,`groups:read`,`mpim:read` : to check if bot in selected channel (if not using `response_url`)
+
+
+## License
+
+The code is under GNU GPL license. So, you are free to modify the code and redistribute it under same license.
+
+Remember the four freedoms of the GPL :
+> the freedom to use the software for any purpose,
+> * the freedom to change the software to suit your needs,
+> * the freedom to share the software with your friends and neighbors, and
+> * the freedom to share the changes you make.
+
 ## Support me
 
 To support or thank me, you can contact me. I would be happy to provide you my PayPal address.
