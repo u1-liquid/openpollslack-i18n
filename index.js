@@ -320,6 +320,7 @@ const checkAndExecuteTasks = async () => {
         }
 
         logger.verbose(`[Task] Executing task for poll_id: ${task.poll_id} to CH:${pollCh}`);
+        //TODO: Sent a real poll not just string
         let mRequestBody = {
           token: mBotToken,
           channel: pollCh,
@@ -327,7 +328,7 @@ const checkAndExecuteTasks = async () => {
           text: `TEST TASK ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`
           ,
         };
-        logger.debug(mRequestBody);
+        //logger.debug(mRequestBody);
         await postChat("",'post',mRequestBody);
 
 
@@ -1223,14 +1224,90 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         isSchedule = true;
         cmdBody = cmdBody.substring(8).trim();
 
-        let schPollID = cmdBody;
+        let schTsText = '2023-11-17T21:54:00+07:00';
+        let schPollID = null;
         let schCH = null;
         let schCron = "0 */5 * * * *";
+        let schTs = new Date(schTsText);
+
+
+        let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+        if(inputPara==="") inputPara=cmdBody;
+        let isParaValid = false;
+        //phase POLL_ID
+        if(inputPara.trim().length>0) {
+          schPollID = inputPara.trim();
+          try {
+            const calObjId =new ObjectId(schPollID);
+            const chkPollData = await pollCol.findOne({ _id: calObjId  });
+
+            if (!chkPollData) {
+              isParaValid = false;
+            }
+            else
+            {
+              if(pollData.hasOwnProperty('team') && pollData.hasOwnProperty('channel')) {
+                if(pollData.team != "" && pollData.team != null &&
+                    pollData.channel != "" && pollData.channel != null
+                ) {
+                  isParaValid = true;
+                } else {
+                  isParaValid = false;
+                }
+              } else {
+                isParaValid = false;
+              }
+            }
+            isParaValid = true;
+          }
+          catch (e) {
+          }
+        }
+        if(!isParaValid) {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: stri18n(userLang, 'task_error_poll_id_invalid')
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+        }
+        cmdBody = cmdBody.substring(inputPara.length).trim();
+
+        //phase TS
+        inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+        if(inputPara==="") inputPara=cmdBody;
+        isParaValid = false;
+        schTsText = inputPara.trim();
+
+        if (!isValidISO8601(schTsText)) {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: stri18n(userLang, 'task_error_date_invalid')
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+        }
+        cmdBody = cmdBody.substring(inputPara.length).trim();
+
+        //phase CH_ID
+        //TODO: CH_ID
+        schCH = null;
+
+        //phase CRON_EXP
+        //TODO: CRON_EXP
+        schCron = "0 */5 * * * *";
+
+        schTs = new Date(schTsText);
+
         if(isSchedule) {
 
           const dataToInsert = {
             poll_id: schPollID,
-            next_ts: new Date('2023-11-17T21:54:00+'),
+            next_ts: schTs,
             is_done: false,
             poll_ch: schCH,
             cron_string: schCron,
@@ -1238,12 +1315,12 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
 
           // Insert the data into scheduleCol
           await scheduleCol.insertOne(dataToInsert);
-
+          let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText});
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
             //blocks: blocks,
-            text: `Poll ID: ${schPollID} scheduled`
+            text: actString
             ,
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
@@ -4423,4 +4500,18 @@ function buildVoteBlock(btn_value, option_text, isCompactUI, isShowDivider, isSh
     },
   };
   return block;
+}
+
+
+function isValidISO8601(inputTS) {
+  // Regular expression to check ISO 8601 format
+  const regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?([+-]\d{2}:\d{2}|Z)?$/;
+
+  if (regex.test(inputTS)) {
+    // Check if the date is valid
+    const date = new Date(inputTS);
+    return !isNaN(date.getTime());
+  } else {
+    return false;
+  }
 }

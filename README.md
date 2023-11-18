@@ -168,7 +168,7 @@ Usage:
 - `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`)
 - `TS` = Time stamp of first run (ISO 8601, eg. `2023-11-17T21:54:00+07:00`)
 - `CH_ID` = empty to post to orginal channel that poll was created (eg. `A0123456`)
-- `CRON_EXP` = empty for run once, or put [cron expression](https://www.npmjs.com/package/cron-parser#supported-format) here (eg. `0 30 12 15 * *` , Post poll 12:30 PM on the 15th day of every month)
+- `CRON_EXP` = empty for run once, or put [cron expression](https://github.com/harrisiirak/cron-parser#supported-format) here (eg. `0 30 12 15 * *` , Post poll 12:30 PM on the 15th day of every month)
 - - "NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
 
 For both question and choices, feel free to use Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` ``  

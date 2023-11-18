@@ -29,6 +29,6 @@
   "log_level_app": "debug",
   "log_level_bolt": "debug",
   "log_to_file": true,
-  "log_dir": "log",
-  "schedule_limit_hrs": 12
+  "log_dir": "logs",
+  "schedule_limit_hrs": 24
 }
