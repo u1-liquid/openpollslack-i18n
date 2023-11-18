@@ -22,13 +22,14 @@ I have made some changes to make it more customizable, such as:
 - Allowing choices to be added by others
 - True anonymous voting (Poller can't see users' votes if this mode is ON): Default ON
 - Supporting Slack's Enterprise Grid and Slack Connect
+- Create poll in private channel without adding bot to that channel (Except create via shortcut and Schedule Poll )
 - Customizable UI (Order, Show/Hide elements you don't want to make it cleaner)
 - UI Language, multiple language support (Please feel free to report any mistranslations)
 - Separate configuration for each Slack team
 - Better error handling to prevent crashes on the server
 - Log to file
 
-NOTE: you make found schedule/recurring poll feature in sourecode. **_this is in-devlopment/testing feature_**, so it won't work as you expect(for now).
+NOTE: you may found schedule/recurring poll feature in sourecode. **_this is in-devlopment/testing feature_**, so it many won't work as you expect(for now).
 
 (Please see detail below)
 
@@ -47,7 +48,7 @@ If you didn't use any of these Feature you might want to use original App here [
 ## Team config (Override Server config)
 
 If some of your team would like to using different config than what is on default.json you can use `/poll config` .
-- this command only work on user who install app to Slack only
+- This command only work on user who install app to Slack only
 - If app was re-add to workspace all Override config will be removed
 
 Usage:
@@ -161,15 +162,58 @@ Usage:
 /poll lang th "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
 
-### ~~Schedule, Recurring Poll (WIP)~~
+### ~~Create Schedule/Recurring Poll (WIP)~~
 ```
-/poll schedule [poll_id] [TS] [CH_ID] [CRON_EXP]
+/poll schedule create [poll_id] [TS] [CH_ID] [CRON_EXP]
 ```
+```
+/poll schedule create_force [poll_id] [TS] [CH_ID] [CRON_EXP]
+(Ignore poll owner check, this command only work on user who install app to Slack only)
+```
+- Bot MUST in the channel
 - `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`)
-- `TS` = Time stamp of first run (ISO 8601, eg. `2023-11-17T21:54:00+07:00`)
+- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)
 - `CH_ID` = empty to post to orginal channel that poll was created (eg. `A0123456`)
 - `CRON_EXP` = empty for run once, or put [cron expression](https://github.com/harrisiirak/cron-parser#supported-format) here (eg. `0 30 12 15 * *` , Post poll 12:30 PM on the 15th day of every month)
 - - "NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
+
+#### Supported cron expression format
+```
+*    *    *    *    *    *
+┬    ┬    ┬    ┬    ┬    ┬
+│    │    │    │    │    |
+│    │    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)
+│    │    │    │    └───── month (1 - 12)
+│    │    │    └────────── day of month (1 - 31, L)
+│    │    └─────────────── hour (0 - 23)
+│    └──────────────────── minute (0 - 59)
+└───────────────────────── second (0 - 59, optional)
+```
+
+##### Example
+- `0 30 8 * * *` -> at 8:00 AM, Every day
+- `0 0 10 * * 1,3,5` -> at 10:00 AM on every Monday, Wednesday, and Friday.
+- `0 45 13 * * 1-5` -> at 1:45 PM on every Monday to Friday.
+- `0 15 9 * * 5L` -> at 9:15 AM on last Friday of every month.
+
+### ~~List Schedule/Recurring Poll (WIP)~~
+```
+/poll schedule list_self
+(List all the create by current user)
+```
+```
+/poll schedule list_all
+(List all in workspace, this command only work on user who install app to Slack only)
+```
+
+### ~~Delete Schedule/Recurring Poll (WIP)~~
+```
+/poll schedule delete [poll_id]
+```
+```
+/poll schedule delete_force [poll_id]
+(Ignore poll owner check, this command only work on user who install app to Slack only)
+```
 
 For both question and choices, feel free to use Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` ``  
 

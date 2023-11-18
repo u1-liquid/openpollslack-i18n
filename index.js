@@ -208,7 +208,8 @@ const createDBIndex = async () => {
   closedCol.createIndex({ channel: 1, ts: 1 });
   hiddenCol.createIndex({ channel: 1, ts: 1 });
   pollCol.createIndex({ channel: 1, ts: 1 });
-  scheduleCol.createIndex({ poll_id: 1, next_ts: 1  });
+  scheduleCol.createIndex({ poll_id: 1, next_ts: 1, is_enable: 1, is_done: 1   });
+  scheduleCol.createIndex({ next_ts: 1, is_enable: 1 , is_done: 1  });
 }
 
 let langCount = 0;
@@ -257,6 +258,7 @@ const checkAndExecuteTasks = async () => {
     const currentDateTime = new Date();
     const pendingTasks = await scheduleCol.find({
       next_ts: { $lte: currentDateTime },
+      is_enable: true,
       is_done: false,
     }).toArray();
 
@@ -279,6 +281,7 @@ const checkAndExecuteTasks = async () => {
       else
       {
         // Perform poll info checking
+        let errMsg = "";
         if(pollData.hasOwnProperty('team') && pollData.hasOwnProperty('channel')) {
           if(pollData.team != "" && pollData.team != null &&
               pollData.channel != "" && pollData.channel != null
@@ -291,25 +294,29 @@ const checkAndExecuteTasks = async () => {
               mBotToken = teamInfo.bot.token;
               pollCh = pollData.channel;
             } else {
-              logger.error(`[Task] poll_id: ${task.poll_id}: Unable to get valid bot token.`);
-
+              errMsg = `[Task] poll_id: ${task.poll_id}: Unable to get valid bot token.`;
+              isPollValid = false;
             }
-
-
           } else {
-            logger.error(`[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`);
+            errMsg = `[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`;
             isPollValid = false;
           }
         } else {
-          logger.error(`[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`);
+          errMsg = `[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`;
           isPollValid = false;
         }
 
         if(!isPollValid) {
-          logger.error(`[Task] poll_id: ${task.poll_id}: Delete invalid task from DB.`);
+          logger.verbose(errMsg);
+          logger.verbose(`[Task] poll_id: ${task.poll_id}: Delete invalid task from DB.`);
+          await scheduleCol.updateOne(
+              { _id: task._id },
+              { $set: { is_enable: false, last_error_ts: new Date(), last_error_text: errMsg} }
+          );
+          continue;
           // Delete the invalid task from scheduleCol
-          await scheduleCol.deleteOne({ _id: task._id });
-          continue; // Skip this task and move to the next one
+          //await scheduleCol.deleteOne({ _id: task._id });
+          //continue; // Skip this task and move to the next one
         }
 
 
@@ -334,12 +341,13 @@ const checkAndExecuteTasks = async () => {
 
       }
 
-
+      let taskRunCounter = 1;
+      if(task.hasOwnProperty('run_counter')) taskRunCounter = task.run_counter + 1;
 
       // Update is_done to true
       await scheduleCol.updateOne(
           { _id: task._id },
-          { $set: { is_done: true } }
+          { $set: { is_done: true, last_run_ts: new Date(), run_counter: taskRunCounter  } }
       );
 
 
@@ -352,7 +360,7 @@ const checkAndExecuteTasks = async () => {
           // Set cron_string to null when it's invalid
           await scheduleCol.updateOne(
               { _id: task._id },
-              { $set: { cron_string: null } }
+              { $set: { cron_string: null, last_error_ts: new Date(), last_error_text: `cron_string '${task.cron_string}' is invalid` } }
           );
           continue; // Skip this task and move to the next one
         }
@@ -375,7 +383,7 @@ const checkAndExecuteTasks = async () => {
             // Set next_ts_warn to false and cron_string to null
             await scheduleCol.updateOne(
                 { _id: task._id },
-                { $set: { next_ts_warn: false, cron_string: null } }
+                { $set: { next_ts_warn: false, cron_string: null , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${scheduleLimitHr} hours. Disable job.`} }
             );
           }
         }
@@ -399,6 +407,9 @@ const checkAndExecuteTasks = async () => {
   }
 };
 
+function removeTask(poll_id) {
+
+}
 
 const parameterizedString = (str,varArray) => {
   if(str==undefined) str = `MissingStr`;
@@ -1211,8 +1222,9 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     let limit = null;
     let isHidden = false;
     let isAllowUserAddChoice = false;
-    let isSchedule = false;
     let fetchArgs = true;
+
+
 
     while (fetchArgs) {
       fetchArgs = false;
@@ -1221,114 +1233,291 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         isAnonymous = true;
         cmdBody = cmdBody.substring(9).trim();
       } else if (cmdBody.startsWith('schedule')) {
-        isSchedule = true;
         cmdBody = cmdBody.substring(8).trim();
-
+        
         let schTsText = '2023-11-17T21:54:00+07:00';
         let schPollID = null;
         let schCH = null;
         let schCron = "0 */5 * * * *";
         let schTs = new Date(schTsText);
-
-
+        let cmdMode = "";
+        let ignoreOwnerCheck = false;
+        let validConfigUser = "";
+        //get mode
         let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
         if(inputPara==="") inputPara=cmdBody;
-        let isParaValid = false;
-        //phase POLL_ID
-        if(inputPara.trim().length>0) {
-          schPollID = inputPara.trim();
-          try {
-            const calObjId =new ObjectId(schPollID);
-            const chkPollData = await pollCol.findOne({ _id: calObjId  });
-
-            if (!chkPollData) {
-              isParaValid = false;
-            }
-            else
-            {
-              if(pollData.hasOwnProperty('team') && pollData.hasOwnProperty('channel')) {
-                if(pollData.team != "" && pollData.team != null &&
-                    pollData.channel != "" && pollData.channel != null
-                ) {
-                  isParaValid = true;
-                } else {
-                  isParaValid = false;
-                }
-              } else {
-                isParaValid = false;
-              }
-            }
-            isParaValid = true;
-          }
-          catch (e) {
-          }
-        }
-        if(!isParaValid) {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            //blocks: blocks,
-            text: stri18n(userLang, 'task_error_poll_id_invalid')
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        }
+        cmdMode = inputPara;
+        //console.log(cmdMode);
         cmdBody = cmdBody.substring(inputPara.length).trim();
+        let isParaValid = false;
 
-        //phase TS
+        if(cmdMode === "create_force") {
+          cmdMode = "create";
+          ignoreOwnerCheck = true;
+        } else if (cmdMode === "delete_force") {
+          cmdMode = "delete";
+          ignoreOwnerCheck = true;
+        }
+
+        const team = await getTeamInfo(teamOrEntId);
+        if (team) {
+          if(team.hasOwnProperty("user"))
+            if(team.user.hasOwnProperty("id")) {
+              validConfigUser = team.user.id;
+            }
+        }
+
+        if(ignoreOwnerCheck) {
+          if(userId !== validConfigUser) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              //blocks: blocks,
+              text: stri18n(userLang,'err_only_installer'),
+            };
+            await postChat(body.response_url,'ephemeral',mRequestBody);
+            return;
+          }
+        }
+
+
+        //phase POLL_ID
         inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
         if(inputPara==="") inputPara=cmdBody;
-        isParaValid = false;
-        schTsText = inputPara.trim();
-
-        if (!isValidISO8601(schTsText)) {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            //blocks: blocks,
-            text: stri18n(userLang, 'task_error_date_invalid')
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        }
+        //console.log(inputPara);
         cmdBody = cmdBody.substring(inputPara.length).trim();
+        isParaValid = false;
+        let chkPollData;
+        if(cmdMode==='create'||cmdMode==='delete') {
+          let idError = "";
+          if(inputPara.trim().length>0) {
+            schPollID = inputPara.trim();
+            try {
+              const calObjId =new ObjectId(schPollID);
+              chkPollData = await pollCol.findOne({ _id: calObjId  });
 
-        //phase CH_ID
-        //TODO: CH_ID
-        schCH = null;
+              if (!chkPollData) {
+                isParaValid = false;
+                idError = "Not found";
+              }
+              else
+              {
+                if(chkPollData.hasOwnProperty('team') && chkPollData.hasOwnProperty('channel')) {
+                  if(chkPollData.team !== "" && chkPollData.team != null &&
+                      chkPollData.channel !== "" && chkPollData.channel != null
+                  ) {
+                    isParaValid = true;
+                  } else {
+                    isParaValid = false;
+                    idError = "Not Support EMPTY";
+                  }
+                } else {
+                  isParaValid = false;
+                  idError = "Not Support NO_KEY";
+                }
+              }
+              isParaValid = true;
+            }
+            catch (e) {
+              idError = "INVALID";
+            }
+          }
+          if(!isParaValid) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              //blocks: blocks,
+              text: stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})`
+            };
+            await postChat(body.response_url,'ephemeral',mRequestBody);
+            return;
+          } else {
+            //check owner
+            if(!ignoreOwnerCheck) {
+              if (body.user_id !== chkPollData.user_id) {
+                logger.debug('reject request because not owner');
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  text: stri18n(appLang,'err_action_other')+" (MISMATCH_USER)",
+                };
+                await postChat(body.response_url,'ephemeral',mRequestBody);
+                return;
+              }
+            } else {
+              //check team
+              if (teamOrEntId !== chkPollData.team) {
+                logger.debug('reject request because not valid team');
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  text: stri18n(appLang,'err_action_other')+" (MISMATCH_TEAM)",
+                };
+                await postChat(body.response_url,'ephemeral',mRequestBody);
+                return;
+              }
+            }
+          }
 
-        //phase CRON_EXP
-        //TODO: CRON_EXP
-        schCron = "0 */5 * * * *";
+          if(cmdMode==='create') {
+            //phase TS
+            inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+            if(inputPara==="") inputPara=cmdBody;
+            cmdBody = cmdBody.substring(inputPara.length).trim();
+            isParaValid = false;
+            schTsText = inputPara.trim();
 
-        schTs = new Date(schTsText);
+            if (!isValidISO8601(schTsText)) {
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                //blocks: blocks,
+                text: stri18n(userLang, 'task_error_date_invalid')
+              };
+              await postChat(body.response_url,'ephemeral',mRequestBody);
+              return;
+            }
 
-        if(isSchedule) {
 
-          const dataToInsert = {
-            poll_id: schPollID,
-            next_ts: schTs,
-            is_done: false,
-            poll_ch: schCH,
-            cron_string: schCron,
+            //phase CH_ID
+            //TODO: CH_ID
+            schCH = null;
+
+            //phase CRON_EXP
+            //TODO: CRON_EXP
+            schCron = "0 */5 * * * *";
+
+            schTs = new Date(schTsText);
+
+            const dataToInsert = {
+              poll_id: new ObjectId(schPollID),
+              next_ts: schTs,
+              created_ts: new Date(),
+              is_done: false,
+              is_enable: true,
+              poll_ch: schCH,
+              cron_string: schCron,
+            };
+
+            // Insert the data into scheduleCol
+            //await scheduleCol.insertOne(dataToInsert);
+            await scheduleCol.replaceOne(
+                { poll_id: new ObjectId(dataToInsert.poll_id) }, // Filter document with the same poll_id
+                dataToInsert, // New document to be inserted
+                { upsert: true } // Option to insert a new document if no matching document is found
+            );
+
+            let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText});
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              text: actString
+              ,
+            };
+            await postChat(body.response_url,'ephemeral',mRequestBody);
+
+            logger.verbose(`[Task] New schedule, Poll ID: ${schPollID}`);
+            return;
+
+          } else if (cmdMode==='delete') {
+            // const updateRes = await scheduleCol.updateMany(
+            //     { poll_id: schPollID },
+            //     { $set: { is_enable: false,is_done: true, last_error_ts: new Date(), last_error_text: "Disable by user request"} }
+            // ); //updateRes.modifiedCount
+            const deleteRes = await scheduleCol.deleteMany(
+                { poll_id: new ObjectId(schPollID) }
+            );
+
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              //blocks: blocks,
+              text: parameterizedString(stri18n(userLang, 'task_delete'), {poll_id:schPollID,deleted_count:deleteRes.deletedCount} )
+            };
+            await postChat(body.response_url,'ephemeral',mRequestBody);
+            return;
+          }
+
+        } else if (cmdMode === "list_self") {
+          //TODO:
+          const queryRes = await scheduleCol.aggregate([
+            // {
+            //   $match: { is_enable: true } // Filter by is_enable before the lookup
+            // },
+            {
+              $lookup: {
+                from: 'poll_data', // collection to join
+                localField: 'poll_id', // field from the input documents
+                foreignField: '_id', // field from the documents of the "from" collection
+                as: 'pollData' // output array field
+              }
+            },
+            {
+              $match: { 'pollData.user_id': body.user_id } // match condition
+            },
+            {
+              $unwind: '$pollData' // deconstructs the 'pollData' array
+            }
+          ]).toArray();
+
+          console.log(queryRes);
+          let resString = "";
+          let foundCount = 0;
+          for (const item of queryRes) {
+            resString+="```";
+            resString+=`Poll ID: ${item.poll_id}\n`;
+            resString+=`Next Run: ${item.next_ts}\n`;
+            resString+=`Enable: ${item.is_enable}\n`;
+            resString+=`Override CH: ${item.poll_ch}\n`;
+            resString+=`Question : ${item.pollData?.question}\n`;
+            resString+=`Run Counter : ${item.run_counter}\n`;
+            resString+="```";
+            foundCount++;
+          }
+
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount} ) + resString,
           };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
 
-          // Insert the data into scheduleCol
-          await scheduleCol.insertOne(dataToInsert);
-          let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText});
+
+        } else if (cmdMode === "list_all") {
+          if(userId !== validConfigUser) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              //blocks: blocks,
+              text: stri18n(userLang,'err_only_installer'),
+            };
+            await postChat(body.response_url,'ephemeral',mRequestBody);
+            return;
+          }
+          //TODO:
+        } else {
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
             //blocks: blocks,
-            text: actString
-            ,
+            text: parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command:slackCommand} )
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
-
-          logger.verbose(`[Task] New schedule, Poll ID: ${schPollID}`);
-
           return;
         }
+
+
+
+
+
+
+
+
+
+
+        return;
+        
 
       } else if (cmdBody.startsWith('test')) {
         //test functiom
@@ -1816,7 +2005,7 @@ app.action('btn_delete', async ({ action, ack, body, context }) => {
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
   if (body.user.id !== action.value) {
-    logger.info('reject req because invalid user');
+    logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -1860,7 +2049,7 @@ app.action('btn_reveal', async ({ action, ack, body, context }) => {
   let value = JSON.parse(action.value);
 
   if (body.user.id !== value.user) {
-    logger.info('reject req because invalid user');
+    logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -3648,7 +3837,7 @@ async function usersVotes(body, client, context, value) {
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
-    logger.info('reject req because invalid user');
+    logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -3817,7 +4006,7 @@ async function revealOrHideVotes(body, context, value) {
   }
 
   if (body.user.id !== value.user) {
-    logger.info('reject req because invalid user');
+    logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -4056,7 +4245,7 @@ async function deletePoll(body, context, value) {
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
-    logger.info('reject req because invalid user');
+    logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -4122,7 +4311,7 @@ async function closePoll(body, client, context, value) {
   }
 
   if (body.user.id !== value.user) {
-    logger.info('reject req because invalid user');
+    logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
           channel: body.channel.id,
