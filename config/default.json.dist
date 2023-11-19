@@ -4,6 +4,7 @@
   "bot_name": "Open Poll Plus",
   "app_lang": "en",
   "app_lang_user_selectable": true,
+  "app_allow_dm": false,
   "use_response_url": true,
   "menu_at_the_end": false,
   "create_via_cmd_only": false,
@@ -30,5 +31,6 @@
   "log_level_bolt": "debug",
   "log_to_file": true,
   "log_dir": "logs",
-  "schedule_limit_hrs": 24
+  "schedule_limit_hrs": 24,
+  "schedule_max_run": 365
 }

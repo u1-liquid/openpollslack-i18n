@@ -31,6 +31,7 @@ const helpLink = config.get('help_link');
 const helpEmail = config.get('help_email');
 const supportUrl = config.get('support_url');
 const gAppLang = config.get('app_lang');
+const gAppAllowDM = config.get('app_allow_dm');
 const gIsAppLangSelectable = config.get('app_lang_user_selectable');
 const isUseResponseUrl = config.get('use_response_url');
 const gIsViaCmdOnly = config.get('create_via_cmd_only');
@@ -47,7 +48,8 @@ const gIsDeleteDataOnRequest = config.get('delete_data_on_poll_delete');
 const gLogLevelApp = config.get('log_level_app');
 const gLogLevelBolt = config.get('log_level_bolt');
 const gLogToFile = config.get('log_to_file');
-const scheduleLimitHr = config.get('schedule_limit_hrs');
+const gScheduleLimitHr = config.get('schedule_limit_hrs');
+const gScheduleMaxRun = config.get('schedule_max_run');
 
 const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete"];
 
@@ -267,6 +269,9 @@ const checkAndExecuteTasks = async () => {
       let calObjId = null;
       let pollData = null;
       let pollCh = null;
+
+      let warnOwnerString = null;
+
       try {
         calObjId = new ObjectId(task.poll_id);
         pollData = await pollCol.findOne({ _id: calObjId  });
@@ -275,6 +280,9 @@ const checkAndExecuteTasks = async () => {
 
       let isPollValid = true;
       let mBotToken = null;
+      let mTaskOwner = null;
+      if(task.hasOwnProperty('created_user_id')) mTaskOwner = task.created_user_id;
+
       if (!pollData) {
         isPollValid = false;
       }
@@ -327,51 +335,83 @@ const checkAndExecuteTasks = async () => {
         }
 
         logger.verbose(`[Task] Executing task for poll_id: ${task.poll_id} to CH:${pollCh}`);
-        //TODO: Sent a real poll not just string
-        let mRequestBody = {
-          token: mBotToken,
-          channel: pollCh,
-          //blocks: blocks,
-          text: `TEST TASK ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`
-          ,
-        };
-        //logger.debug(mRequestBody);
-        await postChat("",'post',mRequestBody);
+        try {
+          // let mRequestBody = {
+          //   token: mBotToken,
+          //   channel: pollCh,
+          //   //blocks: blocks,
+          //   text: `TEST TASK ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`
+          //   ,
+          // };
+          // //logger.debug(mRequestBody);
+          // await postChat("",'post',mRequestBody);
+          ///////////////
+
+          const blocks = await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd);
+
+
+          if (null === blocks) {
+            logger.warn(`[Task] Failed to create poll ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`)
+            return;
+          }
+
+          let mRequestBody = {
+            token: mBotToken,
+            channel: pollCh,
+            blocks: blocks,
+            text: `Poll : ${pollData.question}`,
+          };
+          await postChat("",'post',mRequestBody);
+
+
+        } catch (e) {
+          logger.verbose(`[Task] Executing task for poll_id: ${task.poll_id} to CH:${pollCh} FAILED!`)
+        }
+
 
 
       }
 
       let taskRunCounter = 1;
+      let taskRunMax = gScheduleMaxRun;
       if(task.hasOwnProperty('run_counter')) taskRunCounter = task.run_counter + 1;
+      if(task.hasOwnProperty('run_max')) taskRunMax = task.run_max;
+
+      let taskIsEnable = true;
+      if(taskRunCounter>=taskRunMax) taskIsEnable = false;
 
       // Update is_done to true
       await scheduleCol.updateOne(
           { _id: task._id },
-          { $set: { is_done: true, last_run_ts: new Date(), run_counter: taskRunCounter  } }
+          { $set: { is_done: true, last_run_ts: new Date(), run_counter: taskRunCounter,run_max: taskRunMax, is_enable: taskIsEnable  } }
       );
 
 
-      if (task.cron_string) {
+      if (task.cron_string && taskIsEnable) {
         // Calculate the next schedule time
         const nextScheduleTime = calculateNextScheduleTime(task.cron_string);
 
         if (!nextScheduleTime) {
-          console.error(`[Task] Error parsing cron_string for poll_id ${task.poll_id} and cron_string ${task.cron_string}`);
+          warnOwnerString = `[Task] Error parsing cron_string for poll_id ${task.poll_id} and cron_string ${task.cron_string}`;
+
+          console.error(warnOwnerString);
           // Set cron_string to null when it's invalid
           await scheduleCol.updateOne(
               { _id: task._id },
-              { $set: { cron_string: null, last_error_ts: new Date(), last_error_text: `cron_string '${task.cron_string}' is invalid` } }
+              { $set: { is_enable: false, last_error_ts: new Date(), last_error_text: `cron_string '${task.cron_string}' is invalid` } }
           );
           continue; // Skip this task and move to the next one
         }
 
-        // Check if the task is scheduled within the scheduleLimitHr
+        // Check if the task is scheduled within the gScheduleLimitHr
         const timeDifferenceHr = (nextScheduleTime - currentDateTime) / (1000 * 60 * 60);
         let nextScheduleValid = false;
-        if (timeDifferenceHr < scheduleLimitHr) {
+        if (timeDifferenceHr < gScheduleLimitHr) {
           // Check if next_ts_warn is false or null or not set
           if (!task.next_ts_warn) {
-            logger.warn(`[Task] ${task.poll_id} First scheduled job and next one is less than ${scheduleLimitHr} hours.`);
+            warnOwnerString = `[Task] ${task.poll_id} First scheduled job and next one is less than ${gScheduleLimitHr} hours.`;
+            logger.warn(warnOwnerString);
             // Set next_ts_warn to true
             await scheduleCol.updateOne(
                 { _id: task._id },
@@ -379,11 +419,12 @@ const checkAndExecuteTasks = async () => {
             );
             nextScheduleValid = true;
           } else {
-            logger.error(`[Task] ${task.poll_id} Scheduled job is less than ${scheduleLimitHr} hours. Disable job.`);
+            warnOwnerString = `[Task] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours. Disable job.`;
+            logger.error(warnOwnerString);
             // Set next_ts_warn to false and cron_string to null
             await scheduleCol.updateOne(
                 { _id: task._id },
-                { $set: { next_ts_warn: false, cron_string: null , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${scheduleLimitHr} hours. Disable job.`} }
+                { $set: { next_ts_warn: false, is_enable: false , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${gScheduleLimitHr} hours. Disable job.`} }
             );
           }
         }
@@ -401,6 +442,16 @@ const checkAndExecuteTasks = async () => {
 
       }//end cron_string
 
+
+
+      if(warnOwnerString !== null && mTaskOwner!==null && gAppAllowDM) {
+        let mRequestBody = {
+          token: mBotToken,
+          channel: mTaskOwner,
+          text: warnOwnerString,
+        };
+        await postChat("",'post',mRequestBody);
+      }
     }
   } catch (e) {
     logger.error(e);
@@ -1161,6 +1212,43 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           text: "```\n/"+slackCommand+" lang th \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
         },
       },
+
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Schedule/Recurring Poll*',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "```\n/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
+              "\n/"+slackCommand+" schedule create_force [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
+              "\n/"+slackCommand+" schedule list_self" +
+              "\n/"+slackCommand+" schedule list_all" +
+              "\n/"+slackCommand+" schedule delete [POLL_ID]" +
+              "\n/"+slackCommand+" schedule delete_force [POLL_ID]" +
+              "```",
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "\n- Bot MUST in the channel" +
+              "\n- Only one schedule for each poll, reschedule will replace previous one" +
+              "\n- You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
+              "\n- `POLL_ID` = ID of poll to schedule " +
+              "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`)" +
+              "\n- `CH_ID` = (Optional) channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
+              "\n- `CRON_EXP` = (Optional) empty for run once, or put \"[cron expression]\" (with \"\")" +
+              "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possable." +
+              "",
+        },
+      },
+
       {
         type: 'section',
         text: {
@@ -1235,10 +1323,12 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       } else if (cmdBody.startsWith('schedule')) {
         cmdBody = cmdBody.substring(8).trim();
         
-        let schTsText = '2023-11-17T21:54:00+07:00';
+        let isEndOfCmd = false;
+        let schTsText = '';//'2023-11-17T21:54:00+07:00';
         let schPollID = null;
         let schCH = null;
-        let schCron = "0 */5 * * * *";
+        let schMAXRUN = gScheduleMaxRun;
+        let schCron = null;
         let schTs = new Date(schTsText);
         let cmdMode = "";
         let ignoreOwnerCheck = false;
@@ -1283,7 +1373,10 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
 
         //phase POLL_ID
         inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-        if(inputPara==="") inputPara=cmdBody;
+        if(inputPara==="") {
+          inputPara=cmdBody;
+          isEndOfCmd =true;
+        }
         //console.log(inputPara);
         cmdBody = cmdBody.substring(inputPara.length).trim();
         isParaValid = false;
@@ -1360,9 +1453,23 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           }
 
           if(cmdMode==='create') {
+
+            if(isEndOfCmd) {
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                //blocks: blocks,
+                text: parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter:"[TS]"})
+              };
+              await postChat(body.response_url,'ephemeral',mRequestBody);
+              return;
+            }
             //phase TS
             inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-            if(inputPara==="") inputPara=cmdBody;
+            if(inputPara==="") {
+              inputPara=cmdBody;
+              isEndOfCmd = true;
+            }
             cmdBody = cmdBody.substring(inputPara.length).trim();
             isParaValid = false;
             schTsText = inputPara.trim();
@@ -1378,14 +1485,103 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               return;
             }
 
-
             //phase CH_ID
-            //TODO: CH_ID
             schCH = null;
+            if(!isEndOfCmd) {
+              inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+              if(inputPara==="") {
+                inputPara=cmdBody;
+                isEndOfCmd = true;
+              }
+              cmdBody = cmdBody.substring(inputPara.length).trim();
+
+              if (inputPara!='-') {
+                schCH = inputPara.trim();
+
+                try {
+                  const result = await client.conversations.info({
+                    token: context.botToken,
+                    channel: schCH
+                  });
+                }
+                catch (e) {
+                  if(e.message.includes('channel_not_found'))
+                  {
+                    let mRequestBody = {
+                      token: context.botToken,
+                      channel: channel,
+                      text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CH_ID]",value:inputPara,error_msg:"(Bot not in Channel or not found)"})
+                    };
+                    await postChat(body.response_url,'ephemeral',mRequestBody);
+                    return;
+                  }
+                  else
+                  {
+                    //ignore it!
+                    logger.debug("Error on client.conversations.info (maybe user click too fast) :"+e.message);
+                  }
+                }
+
+              }
+            }
 
             //phase CRON_EXP
-            //TODO: CRON_EXP
-            schCron = "0 */5 * * * *";
+            //schCron = "0 */5 * * * *";
+            if(!isEndOfCmd) {
+              let firstQt = cmdBody.indexOf('"');
+              let lastQt = cmdBody.lastIndexOf('"');
+              if(firstQt!=0 || lastQt==-1 || firstQt==lastQt) {
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:cmdBody,error_msg:"Cron Expression should enclosed in double quotation marks \"* * * * * *\""})
+                };
+                await postChat(body.response_url,'ephemeral',mRequestBody);
+                return;
+              }
+
+
+              inputPara = (cmdBody.substring(1, lastQt));
+              cmdBody = cmdBody.substring(inputPara.length+2).trim();
+              if(cmdBody==="") isEndOfCmd = true;
+
+              //test cron
+              const nextScheduleTime = calculateNextScheduleTime(inputPara);
+
+              if (!nextScheduleTime) {
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:inputPara,error_msg:"Cron Expression is invalid"})
+                };
+                await postChat(body.response_url,'ephemeral',mRequestBody);
+                return;
+              } else {
+                schCron = inputPara;
+              }
+            }
+
+            //phase MAX_RUN
+            if(!isEndOfCmd) {
+              inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+              if(inputPara==="") {
+                inputPara=cmdBody;
+                isEndOfCmd = true;
+              }
+              cmdBody = cmdBody.substring(inputPara.length).trim();
+
+              if (!isNaN(parseInt(inputPara)) && parseInt(inputPara)>=1) {
+                schMAXRUN = parseInt(inputPara);
+              } else {
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[MAX_RUN]",value:inputPara,error_msg:""})
+                };
+                await postChat(body.response_url,'ephemeral',mRequestBody);
+                return;
+              }
+            }
 
             schTs = new Date(schTsText);
 
@@ -1393,6 +1589,8 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               poll_id: new ObjectId(schPollID),
               next_ts: schTs,
               created_ts: new Date(),
+              created_user_id: userId,
+              run_max: schMAXRUN,
               is_done: false,
               is_enable: true,
               poll_ch: schCH,
@@ -1407,7 +1605,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 { upsert: true } // Option to insert a new document if no matching document is found
             );
 
-            let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText});
+            let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText,poll_ch:schCH,cron_string:schCron,run_max:schMAXRUN});
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
@@ -1439,11 +1637,10 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           }
 
         } else if (cmdMode === "list_self") {
-          //TODO:
           const queryRes = await scheduleCol.aggregate([
-            // {
-            //   $match: { is_enable: true } // Filter by is_enable before the lookup
-            // },
+            {
+              $match: { created_user_id: body.user_id } // Filter by is_enable before the lookup
+            },
             {
               $lookup: {
                 from: 'poll_data', // collection to join
@@ -1452,26 +1649,30 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 as: 'pollData' // output array field
               }
             },
-            {
-              $match: { 'pollData.user_id': body.user_id } // match condition
-            },
+            // {
+            //   $match: { 'pollData.user_id': body.user_id } // match condition
+            // },
             {
               $unwind: '$pollData' // deconstructs the 'pollData' array
             }
           ]).toArray();
 
-          console.log(queryRes);
+          //console.log(queryRes);
           let resString = "";
           let foundCount = 0;
           for (const item of queryRes) {
             resString+="```";
             resString+=`Poll ID: ${item.poll_id}\n`;
             resString+=`Next Run: ${item.next_ts}\n`;
+            resString+=`Cron Expression: ${item.cron_string}\n`;
             resString+=`Enable: ${item.is_enable}\n`;
             resString+=`Override CH: ${item.poll_ch}\n`;
-            resString+=`Question : ${item.pollData?.question}\n`;
-            resString+=`Run Counter : ${item.run_counter}\n`;
-            resString+="```";
+            //resString+=`Question : ${item.pollData?.question}\n`;
+            resString+=`CMD : ${item.pollData?.cmd}\n`;
+            resString+=`Run Counter : ${item.run_counter}/${item.run_max??gScheduleMaxRun}\n`;
+            resString+=`Last Error : ${item.last_error_text}\n`;
+            resString+=`Last Error TS : ${item.last_error_ts}\n`;
+            resString+="```\n";
             foundCount++;
           }
 
@@ -1495,7 +1696,53 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             await postChat(body.response_url,'ephemeral',mRequestBody);
             return;
           }
-          //TODO:
+          const queryRes = await scheduleCol.aggregate([
+            // {
+            //   $match: { created_user_id: body.user_id } // Filter by is_enable before the lookup
+            // },
+            {
+              $lookup: {
+                from: 'poll_data', // collection to join
+                localField: 'poll_id', // field from the input documents
+                foreignField: '_id', // field from the documents of the "from" collection
+                as: 'pollData' // output array field
+              }
+            },
+            {
+              $match: { 'pollData.team': teamOrEntId } // match condition
+            },
+            {
+              $unwind: '$pollData' // deconstructs the 'pollData' array
+            }
+          ]).toArray();
+
+          //console.log(queryRes);
+          let resString = "";
+          let foundCount = 0;
+          for (const item of queryRes) {
+            resString+="```";
+            resString+=`Poll ID: ${item.poll_id}\n`;
+            resString+=`Owner: ${item.created_user_id}\n`;
+            resString+=`Next Run: ${item.next_ts}\n`;
+            resString+=`Cron Expression: ${item.cron_string}\n`;
+            resString+=`Enable: ${item.is_enable}\n`;
+            resString+=`Override CH: ${item.poll_ch}\n`;
+            //resString+=`Question : ${item.pollData?.question}\n`;
+            resString+=`CMD : ${item.pollData?.cmd}\n`;
+            resString+=`Run Counter : ${item.run_counter}/${item.run_max??gScheduleMaxRun}\n`;
+            resString+=`Last Error : ${item.last_error_text}\n`;
+            resString+=`Last Error TS : ${item.last_error_ts}\n`;
+            resString+="```\n";
+            foundCount++;
+          }
+
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount} ) + resString,
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
         } else {
           let mRequestBody = {
             token: context.botToken,
@@ -1506,16 +1753,6 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
         }
-
-
-
-
-
-
-
-
-
-
         return;
         
 
@@ -4278,6 +4515,9 @@ async function deletePoll(body, context, value) {
       );
       hiddenCol.deleteOne(
           { channel: body.channel.id, ts: body.message.ts }
+      );
+      scheduleCol.deleteMany(
+          { poll_id: new ObjectId(value.p_id) }
       );
     }
   }

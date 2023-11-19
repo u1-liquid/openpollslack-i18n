@@ -20,6 +20,7 @@ Open Poll+是用于在Slack中创建调查的免费开源应用程序。
 
 I have made some changes to make it more customizable, such as:
 - Allowing choices to be added by others
+- Schedule/Recurring Poll (Beta)
 - True anonymous voting (Poller can't see users' votes if this mode is ON): Default ON
 - Supporting Slack's Enterprise Grid and Slack Connect
 - Create poll in private channel without adding bot to that channel (Except create via shortcut and Schedule Poll )
@@ -28,8 +29,6 @@ I have made some changes to make it more customizable, such as:
 - Separate configuration for each Slack team
 - Better error handling to prevent crashes on the server
 - Log to file
-
-NOTE: you may found schedule/recurring poll feature in sourecode. **_this is in-devlopment/testing feature_**, so it many won't work as you expect(for now).
 
 (Please see detail below)
 
@@ -73,6 +72,7 @@ Usage:
 - `mongo_db_name`: your mongo database name (Main DB)
 - `app_lang` for translation (Please put language file in language folder), Translate some text to Thai (th-ภาษาไทย)
 - `app_lang_user_selectable` if set to `true`; Let user who create poll (Via Modal) select language of poll UI 
+- `app_allow_dm` Allow app to send direct message to user (When error or schedule occure) 
 - `use_response_url` if set to `true`; app will respond to request using `response_url` instead of using `app.client.chat.post`
   so user will be able to create poll in private channel without adding bot to that channel (using /command or Modal that called by /command, but not via shortcut), But it might get timeout if user not response after Modal was created (click create poll) within slack time limit(30 minutes).
 - `create_via_cmd_only`  if set to `true` (available only if `use_response_url` is enabled) ; User will NOT able to create Poll using Shortcut; it will show `modal_ch_via_cmd_only` string to ask user to create poll via /command instead.
@@ -83,12 +83,13 @@ Usage:
 - `show_help_link` if set to `false`; help link will be removed from poll
 - `show_command_info` if set to `false`; command that use to create poll will be removed (You still can see command in Menu)
 - `true_anonymous` if set to `true`; Poller will no longer see who voted which options if poll is anonymous, If this mode is disabled; `info_anonymous_notice` will show to let users know that poller can still see there votes
-- `delete_data_on_poll_delete` if set to `true`; When poller request to delete the poll, all data in database that refer to that poll will be deleted. If you want to disable it please make sure if compliance with your policy.
+- `delete_data_on_poll_delete` if set to `true`; When poller request to delete the poll, all data in database that refer to that poll will be deleted(schedule poll that refer to deleted poll also stop working). If you want to disable it please make sure if compliance with your policy.
 - `log_level_app` valid options are: `debug` `verbose` `info` `warn` `error`
 - `log_level_bolt` valid options are: `debug` `verbose` `info` `warn` `error`
 - `log_to_file` valid options are: `true` `false`
 - `log_dir` folder of log file
 - `schedule_limit_hrs` schedule will deny to re-run if schedule jobs is shorter than this number (hours)
+- `schedule_max_run` Maximum/Default run count for single schedule that can be set.
 
 ## Example
 
@@ -120,6 +121,9 @@ Usage:
 ```
 /poll "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
+
+For both question and choices, feel free to use Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` ``
+
 ### Anonymous poll
 ```
 /poll anonymous "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
@@ -162,20 +166,32 @@ Usage:
 /poll lang th "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
 
-### ~~Create Schedule/Recurring Poll (WIP)~~
+### Create Schedule/Recurring Poll (Beta)
+Schedule a poll that create by yourself:
 ```
-/poll schedule create [poll_id] [TS] [CH_ID] [CRON_EXP]
+/poll schedule create [POLL_ID] [TS] [CH_ID] "[CRON_EXP]" [MAX_RUN]
 ```
+Example:
 ```
-/poll schedule create_force [poll_id] [TS] [CH_ID] [CRON_EXP]
-(Ignore poll owner check, this command only work on user who install app to Slack only)
+/poll schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00
+/poll schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - "0 30 12 15 * *" 12
+/poll schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 "0 30 12 15 * *" 12
+```
+Schedule poll that create by others in your team
+(this command only work on user who install app to Slack only):
+```
+/poll schedule create_force [POLL_ID] [TS] [CH_ID] "[CRON_EXP]" [MAX_RUN]
 ```
 - Bot MUST in the channel
+- Only one schedule for each poll, reschedule will replace previous one
+- You can get Poll ID from your exist poll > `Menu` > `Command Info.`
 - `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`)
 - `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)
-- `CH_ID` = empty to post to orginal channel that poll was created (eg. `A0123456`)
-- `CRON_EXP` = empty for run once, or put [cron expression](https://github.com/harrisiirak/cron-parser#supported-format) here (eg. `0 30 12 15 * *` , Post poll 12:30 PM on the 15th day of every month)
-- - "NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
+- `CH_ID` = (Optional) channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`)
+- `CRON_EXP` = (Optional) do not set to run once, or put [cron expression](https://github.com/harrisiirak/cron-parser#supported-format) (with "")here (eg. `"0 30 12 15 * *"` , Post poll 12:30 PM on the 15th day of every month)
+- `MAX_RUN` = (Optional) do not set to run maximum time that server allows (`schedule_max_run` times), After Run Counter greater than this number; schedule will disable itself.
+
+- - NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
 
 #### Supported cron expression format
 ```
@@ -196,26 +212,29 @@ Usage:
 - `0 45 13 * * 1-5` -> at 1:45 PM on every Monday to Friday.
 - `0 15 9 * * 5L` -> at 9:15 AM on last Friday of every month.
 
-### ~~List Schedule/Recurring Poll (WIP)~~
+### List Schedule/Recurring Poll
+List all scheduled poll that create by current user:
 ```
 /poll schedule list_self
-(List all the create by current user)
 ```
+
+List all scheduled poll in workspace
+(this command only work on user who install app to Slack only):
 ```
 /poll schedule list_all
-(List all in workspace, this command only work on user who install app to Slack only)
 ```
 
-### ~~Delete Schedule/Recurring Poll (WIP)~~
+### Delete Schedule/Recurring Poll
+Delete schedule that create by yourself:
 ```
-/poll schedule delete [poll_id]
+/poll schedule delete [POLL_ID]
 ```
+Delete schedule that create by others in your team
+(this command only work on user who install app to Slack only):
 ```
-/poll schedule delete_force [poll_id]
-(Ignore poll owner check, this command only work on user who install app to Slack only)
+/poll schedule delete_force [POLL_ID]
 ```
 
-For both question and choices, feel free to use Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` ``  
 
 ## Self hosted installation
 
