@@ -348,7 +348,7 @@ const checkAndExecuteTasks = async () => {
           ///////////////
 
           const blocks = await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
-              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd);
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task");
 
 
           if (null === blocks) {
@@ -1239,16 +1239,43 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           type: 'mrkdwn',
           text: "\n- Bot MUST in the channel" +
               "\n- Only one schedule for each poll, reschedule will replace previous one" +
-              "\n- You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
               "\n- `POLL_ID` = ID of poll to schedule " +
+              "\n   - You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
               "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`)" +
               "\n- `CH_ID` = (Optional) channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
-              "\n- `CRON_EXP` = (Optional) empty for run once, or put \"[cron expression]\" (with \"\")" +
+              "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
+              "\n- `CRON_EXP` = (Optional) empty for run once, or put \"<https://github.com/harrisiirak/cron-parser#supported-format|[cron expression]>\" (with \"\")" +
               "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possable." +
               "",
         },
       },
-
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "Supported cron expression format: ```" +
+              "\n*    *    *    *    *    *" +
+              "\n┬    ┬    ┬    ┬    ┬    ┬" +
+              "\n│    │    │    │    │    |" +
+              "\n│    │    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)" +
+              "\n│    │    │    │    └───── month (1 - 12)" +
+              "\n│    │    │    └────────── day of month (1 - 31, L)" +
+              "\n│    │    └─────────────── hour (0 - 23)" +
+              "\n│    └──────────────────── minute (0 - 59)" +
+              "\n└───────────────────────── second (0 - 59, optional)" +
+              "```",
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "Example:\n"+
+              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
+              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"0 30 12 15 * *\" 12```\n" +
+              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"0 30 12 15 * *\" 12```"
+        },
+      },
       {
         type: 'section',
         text: {
@@ -1335,7 +1362,10 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         let validConfigUser = "";
         //get mode
         let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-        if(inputPara==="") inputPara=cmdBody;
+        if(inputPara==="") {
+          inputPara=cmdBody;
+          isEndOfCmd =true;
+        }
         cmdMode = inputPara;
         //console.log(cmdMode);
         cmdBody = cmdBody.substring(inputPara.length).trim();
@@ -1347,6 +1377,15 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         } else if (cmdMode === "delete_force") {
           cmdMode = "delete";
           ignoreOwnerCheck = true;
+        } else if (cmdMode === "") {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            //blocks: blocks,
+            text: parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
         }
 
         const team = await getTeamInfo(teamOrEntId);
@@ -1420,7 +1459,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               token: context.botToken,
               channel: channel,
               //blocks: blocks,
-              text: stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})`
+              text: stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})` + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
             };
             await postChat(body.response_url,'ephemeral',mRequestBody);
             return;
@@ -1459,7 +1498,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 token: context.botToken,
                 channel: channel,
                 //blocks: blocks,
-                text: parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter:"[TS]"})
+                text: parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter:"[TS]"}) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
               };
               await postChat(body.response_url,'ephemeral',mRequestBody);
               return;
@@ -1479,7 +1518,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 token: context.botToken,
                 channel: channel,
                 //blocks: blocks,
-                text: stri18n(userLang, 'task_error_date_invalid')
+                text: stri18n(userLang, 'task_error_date_invalid') + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
               };
               await postChat(body.response_url,'ephemeral',mRequestBody);
               return;
@@ -1748,7 +1787,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             token: context.botToken,
             channel: channel,
             //blocks: blocks,
-            text: parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command:slackCommand} )
+            text: parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command:slackCommand} ) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
@@ -2025,7 +2064,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     }
 
 
-    const blocks = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
+    const blocks = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,"cmd");
 
 
     if (null === blocks) {
@@ -2955,6 +2994,59 @@ async function createModal(context, client, trigger_id,response_url,channel) {
       ]);
     }
 
+  //select when to post
+    blocks = blocks.concat([
+
+      {
+        "type": "input",
+        "element": {
+          "type": "static_select",
+          // "placeholder": {
+          //   "type": "plain_text",
+          //   "text": stri18n(appLang,'info_lang_select_hint'),
+          //   "emoji": true
+          // },
+          "options": [
+            {
+              "text": {
+                "type": "plain_text",
+                "text": "Now",
+                "emoji": true
+              },
+              "value": "now"
+            }
+          ],
+          "initial_option" : {
+            "text": {
+              "type": "plain_text",
+              "text": "Now",
+              "emoji": true
+            },
+            "value": "now"
+          },
+          //"action_id": "modal_select_lang"
+        },
+        "label": {
+          "type": "plain_text",
+          "text": stri18n(appLang,'task_scheduled_when'),
+          "emoji": true
+        },
+        block_id: 'task_when',
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: parameterizedString(stri18n(appLang,'task_scheduled_when_note'),{slack_command:slackCommand}),
+          },
+        ],
+      },
+      {
+        type: 'divider',
+      },
+    ]);
+
     let isAppLangSelectable = gIsAppLangSelectable;
     if(teamConfig.hasOwnProperty("app_lang_user_selectable"))
       isAppLangSelectable = teamConfig.app_lang_user_selectable;
@@ -3136,6 +3228,7 @@ async function createModal(context, client, trigger_id,response_url,channel) {
           },
         ],
       },
+
     ]);
 
     //logger.debug(JSON.stringify(blocks));
@@ -3428,7 +3521,11 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   if(privateMetadata.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = privateMetadata.add_number_emoji_to_choice_btn;
   else if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
 
-  const blocks = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd);
+  let cmd_via;
+  if(response_url!==undefined && response_url!=="") cmd_via = "modal_auto"
+  else cmd_via = "modal_manual";
+
+  const blocks = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via);
 
   let mRequestBody = {
     token: context.botToken,
@@ -3485,7 +3582,7 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   return cmd;
 }
 
-async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd) {
+async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via) {
   if (
     !question
     || !options
@@ -3520,6 +3617,7 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
     created_ts: new Date(),
     user_id: userId,
     cmd: cmd,
+    cmd_via,
     question: question,
     options: options,
     para: button_value

@@ -184,14 +184,16 @@ Schedule poll that create by others in your team
 ```
 - Bot MUST in the channel
 - Only one schedule for each poll, reschedule will replace previous one
-- You can get Poll ID from your exist poll > `Menu` > `Command Info.`
+- If you don't want to post poll now, please create dummy poll in empty channel
 - `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`)
+  - To get Poll ID: go to exist poll > `Menu` > `Command Info.`
 - `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)
 - `CH_ID` = (Optional) channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`)
+  - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.
 - `CRON_EXP` = (Optional) do not set to run once, or put [cron expression](https://github.com/harrisiirak/cron-parser#supported-format) (with "")here (eg. `"0 30 12 15 * *"` , Post poll 12:30 PM on the 15th day of every month)
 - `MAX_RUN` = (Optional) do not set to run maximum time that server allows (`schedule_max_run` times), After Run Counter greater than this number; schedule will disable itself.
 
-- - NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
+NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
 
 #### Supported cron expression format
 ```
