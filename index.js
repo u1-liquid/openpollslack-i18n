@@ -347,8 +347,8 @@ const checkAndExecuteTasks = async () => {
           // await postChat("",'post',mRequestBody);
           ///////////////
 
-          const blocks = await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
-              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task");
+          const blocks = (await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task")).blocks;
 
 
           if (null === blocks) {
@@ -384,7 +384,7 @@ const checkAndExecuteTasks = async () => {
       // Update is_done to true
       await scheduleCol.updateOne(
           { _id: task._id },
-          { $set: { is_done: true, last_run_ts: new Date(), run_counter: taskRunCounter,run_max: taskRunMax, is_enable: taskIsEnable  } }
+          { $set: { is_done: true, is_enable: false, last_run_ts: new Date(), run_counter: taskRunCounter,run_max: taskRunMax, is_enable: taskIsEnable  } }
       );
 
 
@@ -415,7 +415,7 @@ const checkAndExecuteTasks = async () => {
             // Set next_ts_warn to true
             await scheduleCol.updateOne(
                 { _id: task._id },
-                { $set: { next_ts_warn: true } }
+                { $set: { is_enable: true, next_ts_warn: true } }
             );
             nextScheduleValid = true;
           } else {
@@ -436,7 +436,7 @@ const checkAndExecuteTasks = async () => {
           // Set the next_ts to the next schedule time and reset is_done to false
           await scheduleCol.updateOne(
               { _id: task._id },
-              { $set: { next_ts: nextScheduleTime, is_done: false } }
+              { $set: { next_ts: nextScheduleTime, is_done: false, is_enable: true } }
           );
         }
 
@@ -1675,6 +1675,62 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             return;
           }
 
+        } else if (cmdMode === "delete_done") {
+
+          let deletedCount = 0;
+          if(userId !== validConfigUser) {
+            // let mRequestBody = {
+            //   token: context.botToken,
+            //   channel: channel,
+            //   //blocks: blocks,
+            //   text: stri18n(userLang,'err_only_installer'),
+            // };
+            // await postChat(body.response_url,'ephemeral',mRequestBody);
+            // return;
+            const deleteRes = await scheduleCol.deleteMany(
+                { created_user_id: userId, is_enable: false }
+            );
+            deletedCount = deleteRes.deletedCount;
+          } else {
+            const queryRes = await scheduleCol.aggregate([
+              {
+                $match: { is_enable: false } // Filter by is_enable before the lookup
+              },
+              {
+                $lookup: {
+                  from: 'poll_data', // collection to join
+                  localField: 'poll_id', // field from the input documents
+                  foreignField: '_id', // field from the documents of the "from" collection
+                  as: 'pollData' // output array field
+                }
+              },
+              {
+                $match: { 'pollData.team': teamOrEntId } // match condition
+              },
+              {
+                $unwind: '$pollData' // deconstructs the 'pollData' array
+              }
+            ]).toArray();
+
+            const idsToDelete = queryRes.map(doc => doc._id);
+
+            const deleteRes = await scheduleCol.deleteMany(
+                { _id: { $in: idsToDelete } }
+            );
+            deletedCount = deleteRes.deletedCount;
+          }
+
+
+
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            text: parameterizedString(stri18n(userLang, 'task_delete_multiple'), {deleted_count:deletedCount} ) ,
+          };
+          await postChat(body.response_url,'ephemeral',mRequestBody);
+          return;
+
+
         } else if (cmdMode === "list_self") {
           const queryRes = await scheduleCol.aggregate([
             {
@@ -2064,7 +2120,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     }
 
 
-    const blocks = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,"cmd");
+    const blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,"cmd")).blocks;
 
 
     if (null === blocks) {
@@ -2995,43 +3051,48 @@ async function createModal(context, client, trigger_id,response_url,channel) {
     }
 
   //select when to post
+    const nowBlock = {
+      "text": {
+        "type": "plain_text",
+        "text": stri18n(appLang,'task_scheduled_now'),
+        "emoji": true
+      },
+      "value": "now"
+    };
+    const laterBlock = {
+      "text": {
+        "type": "plain_text",
+        "text": stri18n(appLang,'task_scheduled_later'),
+        "emoji": true
+      },
+      "value": "later"
+    };
     blocks = blocks.concat([
 
       {
         "type": "input",
+        "dispatch_action": true,
         "element": {
           "type": "static_select",
+          "action_id": "modal_select_when",
           // "placeholder": {
           //   "type": "plain_text",
           //   "text": stri18n(appLang,'info_lang_select_hint'),
           //   "emoji": true
           // },
           "options": [
-            {
-              "text": {
-                "type": "plain_text",
-                "text": "Now",
-                "emoji": true
-              },
-              "value": "now"
-            }
+            nowBlock,laterBlock
           ],
-          "initial_option" : {
-            "text": {
-              "type": "plain_text",
-              "text": "Now",
-              "emoji": true
-            },
-            "value": "now"
-          },
-          //"action_id": "modal_select_lang"
+          "initial_option" : nowBlock,
+          
         },
         "label": {
           "type": "plain_text",
           "text": stri18n(appLang,'task_scheduled_when'),
           "emoji": true
         },
-        block_id: 'task_when',
+        "block_id": 'task_when',
+
       },
       {
         type: 'context',
@@ -3092,6 +3153,7 @@ async function createModal(context, client, trigger_id,response_url,channel) {
             },
             "options": allOptions,
             "initial_option" : defaultOption,
+            //"action_id": "task_scheduled_when"
             //"action_id": "modal_select_lang"
           },
           "label": {
@@ -3259,6 +3321,170 @@ async function createModal(context, client, trigger_id,response_url,channel) {
   }
 }
 
+app.action('modal_select_when', async ({ action, ack, body, client, context }) => {
+  await ack();
+
+  //console.log(action);
+  //console.log(body);
+  if (
+      !action
+      || !action.selected_option.value
+  ) {
+    return;
+  }
+
+  let isNow = true;
+  if(action.selected_option.value=="now") {
+    isNow = true;
+  } else {
+    isNow = false;
+  }
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+  const privateMetadata = JSON.parse(body.view.private_metadata);
+  //privateMetadata.channel = action.selected_channel || action.selected_conversation;
+
+  //logger.debug(action);
+  //logger.debug("CH:"+privateMetadata.channel);
+  let isChFound = true;
+  let isChErr = false;
+  try {
+    const result = await client.conversations.info({
+      token: context.botToken,
+      hash: body.view.hash,
+      channel: privateMetadata.channel
+    });
+  }
+  catch (e) {
+    if(e.message.includes('channel_not_found'))
+    {
+      isChFound = false;
+    }
+    else
+    {
+      //ignote it!
+      logger.debug("Error on client.conversations.info (maybe user click too fast) :"+e.message);
+      isChErr = true;
+    }
+
+  }
+
+  let foundHintString = false;
+  let blockPointer = 0;
+  let blocks = body.view.blocks;
+  for (const i in blocks) {
+    let b = blocks[i];
+    if(b.hasOwnProperty('block_id')){
+      //test next element
+      let nextIndex = parseInt(i)+1;
+      if(blocks.length > nextIndex  ){
+        //logger.info("Block" +nextIndex +"IS:");
+        //logger.info(blocks[nextIndex]);
+        if(!foundHintString) {
+          if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type=="context"){
+            //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
+            if(isNow) {
+              blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_ch_response_url_auto');
+              //break;
+            }
+            else {
+              if(isChErr) {
+                blocks[nextIndex].elements[0].text = stri18n(appLang,'err_poll_ch_exception');
+              }
+              else if (isChFound) {
+                blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_bot_in_ch');
+              }
+              else {
+                blocks[nextIndex].elements[0].text = parameterizedString(langDict[appLang]['modal_bot_not_in_ch'],{slack_command:slackCommand,bot_name:botName})
+              }
+              //break;
+            }
+            foundHintString = true;
+          }
+        }
+        else {
+          //find time select element
+          //console.log(blockPointer + ":" + b.block_id)
+          if(b.block_id==="task_when") {
+            //input date time should be in nexr box
+            //console.log("task_when FOUND!")
+            if(isNow) {
+              //delete date picker
+              //console.log("change back to now");
+              let beginBlocks = blocks.slice(0, blockPointer+1);
+              let endBlocks = blocks.slice(blockPointer+2);
+              blocks = beginBlocks.concat(endBlocks);
+            } else {
+              //add date picker
+              if(blocks[nextIndex]?.block_id === "task_when_ts") {
+                //already exist
+                //console.log("task_when_ts already exist");
+              }
+              else {
+                let beginBlocks = blocks.slice(0, blockPointer+1);
+                let endBlocks = blocks.slice(blockPointer+1);
+
+                const dateTimeInput = {
+                  "type": "input",
+                  "block_id": 'task_when_ts',
+                  "element": {
+                    "type": "datetimepicker",
+                    //"action_id": "datetimepicker-action"
+                  },
+                  // "hint": {
+                  //   "type": "plain_text",
+                  //   "text": "This is some hint text",
+                  //   "emoji": true
+                  // },
+                  "label": {
+                    "type": "plain_text",
+                    "text": stri18n(appLang,'task_scheduled_post_on'),
+                    "emoji": true
+                  }
+                };
+
+                let tempModalBlockInput = JSON.parse(JSON.stringify(dateTimeInput));
+                //tempModalBlockInput.block_id = 'TEST_choice_'+(blocks.length-8);
+
+                beginBlocks.push(tempModalBlockInput);
+                blocks = beginBlocks.concat(endBlocks);
+              }
+            }
+
+
+            break;
+          }
+        }
+      }
+    }
+    blockPointer++;
+  }
+  //logger.debug(blocks);
+  const view = {
+    type: body.view.type,
+    private_metadata: JSON.stringify(privateMetadata),
+    callback_id: 'modal_poll_submit',
+    title: body.view.title,
+    submit: body.view.submit,
+    close: body.view.close,
+    blocks: blocks,
+    external_id: body.view.id,
+  };
+
+  try {
+    const result = await client.views.update({
+      token: context.botToken,
+      hash: body.view.hash,
+      view: view,
+      view_id: body.view.id,
+    });
+  }
+  catch (e) {
+    logger.debug("Error on modal_poll_channel (maybe user click too fast");
+  }
+});
+
 app.action('modal_poll_channel', async ({ action, ack, body, client, context }) => {
   await ack();
 
@@ -3419,6 +3645,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   const teamOrEntId = getTeamOrEnterpriseId(context);
   const teamConfig = await getTeamOverride(teamOrEntId);
   let appLang= gAppLang;
+  let postDateTime = null;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   const privateMetadata = JSON.parse(view.private_metadata);
   const userId = body.user.id;
@@ -3458,6 +3685,9 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
             }
           }
         }
+      } else if ('task_when_ts' === optionName) {
+        postDateTime = option.selected_date_time;
+        //console.log(option);
       }
     }
   }
@@ -3525,15 +3755,79 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   if(response_url!==undefined && response_url!=="") cmd_via = "modal_auto"
   else cmd_via = "modal_manual";
 
-  const blocks = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via);
+  const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via);
+  const blocks = pollView.blocks;
+  const pollID = pollView.poll_id;
+  if(postDateTime===null) {
+    let mRequestBody = {
+      token: context.botToken,
+      channel: channel,
+      blocks: blocks,
+      text: `Poll : ${question}`,
+    };
+    await postChat(response_url,'post',mRequestBody);
+  } else {
+    //schedule
+    //console.log(postDateTime);
+    try {
 
-  let mRequestBody = {
-    token: context.botToken,
-    channel: channel,
-    blocks: blocks,
-    text: `Poll : ${question}`,
-  };
-  await postChat(response_url,'post',mRequestBody);
+      let posttimestamp = parseInt(postDateTime, 10);
+      const schTs = new Date(posttimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
+      let isoStr = schTs.toISOString();
+      //console.log(isoStr);
+      //console.log(schTs);;
+      const dataToInsert = {
+        poll_id: new ObjectId(pollID),
+        next_ts: schTs,
+        created_ts: new Date(),
+        created_user_id: userId,
+        run_max: 1,
+        is_done: false,
+        is_enable: true,
+        poll_ch: null,
+        cron_string: null,
+      };
+
+      // Insert the data into scheduleCol
+      //await scheduleCol.insertOne(dataToInsert);
+      await scheduleCol.replaceOne(
+          {poll_id: new ObjectId(pollID)}, // Filter document with the same poll_id
+          dataToInsert, // New document to be inserted
+          {upsert: true} // Option to insert a new document if no matching document is found
+      );
+
+      let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {
+        poll_id: pollID,
+        ts: isoStr,
+        poll_ch: null,
+        cron_string: null,
+        run_max: 1
+      });
+      let mRequestBody = {
+        token: context.botToken,
+        channel: channel,
+        text: actString
+        ,
+      };
+      await postChat(response_url, 'ephemeral', mRequestBody);
+
+      logger.verbose(`[TASK] New task create from UI (PollID:${pollID})`);
+    }
+    catch (e) {
+      logger.error(`[TASK] New task create from UI (PollID:${pollID}) ERROR`);
+      logger.error(e);
+      let mRequestBody = {
+        token: context.botToken,
+        channel: channel,
+        text: "[TASK] Scheduled Error"
+      };
+      await postChat(response_url, 'ephemeral', mRequestBody);
+    }
+
+
+  }
+
+
 });
 
 function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang) {
@@ -3894,7 +4188,7 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
     });
   }
 
-  return blocks;
+  return {blocks:blocks,poll_id:pollID};
 }
 
 // btn actions

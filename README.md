@@ -236,7 +236,11 @@ Delete schedule that create by others in your team
 ```
 /poll schedule delete_force [POLL_ID]
 ```
-
+Delete all schedule that already done/no longer valid/disabled
+(if run by user who install app to Slack, it will clear invalid poll for whole workspace):
+```
+/poll schedule delete_done
+```
 
 ## Self hosted installation
 
