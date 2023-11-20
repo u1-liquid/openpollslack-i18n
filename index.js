@@ -407,10 +407,11 @@ const checkAndExecuteTasks = async () => {
         // Check if the task is scheduled within the gScheduleLimitHr
         const timeDifferenceHr = (nextScheduleTime - currentDateTime) / (1000 * 60 * 60);
         let nextScheduleValid = false;
+        let nextWarn = false;
         if (timeDifferenceHr < gScheduleLimitHr) {
-          // Check if next_ts_warn is false or null or not set
+          // Check if next_ts_warn is false or null or not set (only allow once)
           if (!task.next_ts_warn) {
-            warnOwnerString = `[Task] ${task.poll_id} First scheduled job and next one is less than ${gScheduleLimitHr} hours.`;
+            warnOwnerString = `[Task] ${task.poll_id} First scheduled job and next one is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours).`;
             logger.warn(warnOwnerString);
             // Set next_ts_warn to true
             await scheduleCol.updateOne(
@@ -418,13 +419,14 @@ const checkAndExecuteTasks = async () => {
                 { $set: { is_enable: true, next_ts_warn: true } }
             );
             nextScheduleValid = true;
+            nextWarn= true;
           } else {
-            warnOwnerString = `[Task] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours. Disable job.`;
+            warnOwnerString = `[Task] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Disable job.`;
             logger.error(warnOwnerString);
             // Set next_ts_warn to false and cron_string to null
             await scheduleCol.updateOne(
                 { _id: task._id },
-                { $set: { next_ts_warn: false, is_enable: false , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${gScheduleLimitHr} hours. Disable job.`} }
+                { $set: { next_ts_warn: false, is_enable: false , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Disable job.`} }
             );
           }
         }
@@ -436,7 +438,7 @@ const checkAndExecuteTasks = async () => {
           // Set the next_ts to the next schedule time and reset is_done to false
           await scheduleCol.updateOne(
               { _id: task._id },
-              { $set: { next_ts: nextScheduleTime, is_done: false, is_enable: true } }
+              { $set: { next_ts: nextScheduleTime, is_done: false, is_enable: true,next_ts_warn:nextWarn } }
           );
         }
 
@@ -1644,7 +1646,12 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 { upsert: true } // Option to insert a new document if no matching document is found
             );
 
-            let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText,poll_ch:schCH,cron_string:schCron,run_max:schMAXRUN});
+            let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText,poll_ch:schCH,run_max:schMAXRUN});
+
+            if(schCron !== null) {
+              actString += "\n"+ parameterizedString(stri18n(userLang, 'task_scheduled_with_cron'),{cron:schCron,run_max_hrs:gScheduleLimitHr});
+            }
+
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
@@ -1853,22 +1860,35 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
 
       } else if (cmdBody.startsWith('test')) {
         //test functiom
-        logger.debug(context);
-        cmdBody = cmdBody.substring(4).trim();
-        let teamId = getTeamOrEnterpriseId (context);
-        logger.debug("TeamID:"+teamId);
+        try {
+          logger.debug(context);
+          cmdBody = cmdBody.substring(4).trim();
+          let teamId = getTeamOrEnterpriseId(context);
+          logger.debug("TeamID:" + teamId);
 
+          const userInfo = await app.client.users.info({
+            token: context.botToken,
+            user: userId
+          });
 
-        let mRequestBody = {
-          token: context.botToken,
-          channel: cmdBody,
-          //blocks: blocks,
-          text: `TEST MSG TO ${cmdBody} from ${userId}`
-          ,
-        };
-        logger.debug(mRequestBody);
-        await postChat("",'post',mRequestBody);
-        return;
+          const testDate = new Date();
+          const testDateStr = testDate.toDateString();
+          let mRequestBody = {
+            token: context.botToken,
+            channel: cmdBody,
+            //blocks: blocks,
+            text: `TEST MSG TO ${cmdBody} from ${userId} Date ${testDateStr}}\n` +
+                `Your time zone is: ${userInfo?.user?.tz} (${userInfo?.user?.tz_label}, Offset: ${userInfo?.user?.tz_offset} seconds)`
+            ,
+          };
+          //logger.debug(mRequestBody);
+          await postChat(body.response_url, 'post', mRequestBody);
+          return;
+        } catch (e)
+        {
+          logger.debug("error in test Function");
+          logger.debug(e);
+        }
 
 
       } else if (cmdBody.startsWith('limit')) {
