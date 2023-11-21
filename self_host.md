@@ -39,18 +39,20 @@ Once done, you will be redirected to your app "Basic Information"
 
 Expand the "Add features and functionality" and activate :
 
+- App Home
 - Interactive Components
-- Event Subscriptions
 - Slash Commands
+- Event Subscriptions
 - Bots
 - Permissions
 
+#### App Home
+Set App Display Name, Enable Home Tab(Optional), Enable Messages Tab(Optional).
+If you doesn't enable this, user will not get any schedule notification in case of any schedule error occure, 
+please set `app_allow_dm` to `false` in you doesn't enable this otherwise you will get an error!
+
 #### Interactive Components
 Activate it with the On/Off button. Fill the `Request URL` with `https://YOURHOSTNAME/slack/actions`. Replace `YOURHOSTNAME` with yours. Keep `/slack/actions` at the end !
-
-#### Event Subscriptions
-Activate it with the On/Off button. Fill the `Request URL` with `https://YOURHOSTNAME/slack/events`. Replace `YOURHOSTNAME` with yours. Keep `/slack/events` at the end !
-and add the app_home_opened event under "Subscribe to bot events".
 
 #### Slash Commands
 Inside the "Basic Information" page, click on "Slash Commands" under "Add features and functionality".
@@ -58,11 +60,17 @@ Inside the "Basic Information" page, click on "Slash Commands" under "Add featur
 In this page, click on "Create New Command" Fill the next fields:
 
 - Command: The name of the command inside slack. Mine is "/openpoll"
-- Request URL: Fill with `https://YOURHOSTNAME/slack/commands` and replace `YOURHOSTNAME` with yours. 
+- Request URL: Fill with `https://YOURHOSTNAME/slack/commands` and replace `YOURHOSTNAME` with yours.
 - Short Description: Describe the command here. Mine is simply "Create a poll"
 - Usage Hint: Give hint to user. Mine is `"What is you favourite color ?" "Red" "Green" "Blue" "Yellow"`
 - Escape channels, users, and links sent to your app: I've not ticked the box. No usage required in the app.
-- 
+
+#### Event Subscriptions
+Activate it with the On/Off button. Fill the `Request URL` with `https://YOURHOSTNAME/slack/events`. Replace `YOURHOSTNAME` with yours. Keep `/slack/events` at the end !
+and add the `app_home_opened` event under "Subscribe to bot events".
+
+
+
 #### Shortcut (optional, but useful to your users)
 Create a new shortcut by clicking on `Create New Shortcut`, select `Global` and click on `Next` button. Fill the next fields:
 
@@ -82,7 +90,7 @@ In this step, I have deactivated "Messages Tab". Nothing to use it are really im
 #### Permissions
 Inside the "Basic Information" page, click on "Premissions" under "Add features and functionality" or find the "OAuth & Permissions" entry in left menu.
 
-Firstly, click on "Add New Redirect URL". Fill it with `https://YOURHOSTNAME/slack/oauth_redirect` and replace `YOURHOSTNAME` with yours. Mine is `https://api.openpoll.dev.slack.alcor.space/slack/oauth_redirect`. Then click on "Add" button.
+Firstly, click on "Add New Redirect URL". Fill it with `https://YOURHOSTNAME/slack/oauth_redirect` and replace `YOURHOSTNAME` with yours. Then click on "Add" button.
 
 Under "Scopes" section and "Bot Token Scopes" subsection, click on "Add an OAuth Scope". Then, add theses scopes :
 

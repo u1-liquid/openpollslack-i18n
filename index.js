@@ -18,7 +18,8 @@ const cronParser = require('cron-parser');
 const { createLogger, format, transports } = require('winston');
 const fs = require('fs');
 const path = require('path');
-const moment = require('moment');
+//const moment = require('moment');
+const moment = require('moment-timezone');
 
 let langDict = {};
 
@@ -111,7 +112,7 @@ const boltTransportsArray = [
 ];
 
 if (gLogToFile) {
-  const gLogDir = config.get('log_dir');
+  const gLogDir = path.normalize(config.get('log_dir').toString());
   // Create the log directory if it does not exist
   if (!fs.existsSync(gLogDir)) {
     fs.mkdirSync(gLogDir);
@@ -247,11 +248,16 @@ if(!langDict.hasOwnProperty(gAppLang)) {
 
 logger.info('Init cron jobs...');
 
-function calculateNextScheduleTime(cronString) {
+function calculateNextScheduleTime(cronString,timeZoneString) {
   try {
-    const interval = cronParser.parseExpression(cronString);
+    if(timeZoneString===null) timeZoneString = 'UTC';
+    const options = {
+      tz: timeZoneString
+    };
+    const interval = cronParser.parseExpression(cronString,options);
     return interval.next().toDate();
   } catch (error) {
+    console.log(error);
     return null;
   }
 }
@@ -265,12 +271,12 @@ const checkAndExecuteTasks = async () => {
     }).toArray();
 
     for (const task of pendingTasks) {
-      logger.debug(`[Task] processing poll_id: ${task.poll_id}.`);
+      logger.debug(`[Schedule] processing poll_id: ${task.poll_id}.`);
       let calObjId = null;
       let pollData = null;
       let pollCh = null;
 
-      let warnOwnerString = null;
+      let dmOwnerString = null;
 
       try {
         calObjId = new ObjectId(task.poll_id);
@@ -302,23 +308,23 @@ const checkAndExecuteTasks = async () => {
               mBotToken = teamInfo.bot.token;
               pollCh = pollData.channel;
             } else {
-              errMsg = `[Task] poll_id: ${task.poll_id}: Unable to get valid bot token.`;
+              errMsg = `[Schedule] poll_id: ${task.poll_id}: Unable to get valid bot token.`;
               isPollValid = false;
             }
           } else {
-            errMsg = `[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`;
-            warnOwnerString = errMsg;
+            errMsg = `[Schedule] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`;
+            dmOwnerString = errMsg;
             isPollValid = false;
           }
         } else {
-          errMsg = `[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`;
-          warnOwnerString = errMsg;
+          errMsg = `[Schedule] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`;
+          dmOwnerString = errMsg;
           isPollValid = false;
         }
 
         if(!isPollValid) {
           logger.verbose(errMsg);
-          logger.verbose(`[Task] poll_id: ${task.poll_id}: Delete invalid task from DB.`);
+          logger.verbose(`[Schedule] poll_id: ${task.poll_id}: Delete invalid task from DB.`);
           await scheduleCol.updateOne(
               { _id: task._id },
               { $set: { is_enable: false, last_error_ts: new Date(), last_error_text: errMsg} }
@@ -336,7 +342,7 @@ const checkAndExecuteTasks = async () => {
           }
         }
 
-        logger.verbose(`[Task] Executing task for poll_id: ${task.poll_id} to CH:${pollCh}`);
+        logger.verbose(`[Schedule] Executing task for poll_id: ${task.poll_id} to CH:${pollCh}`);
         try {
           // let mRequestBody = {
           //   token: mBotToken,
@@ -354,8 +360,8 @@ const checkAndExecuteTasks = async () => {
 
 
           if (null === blocks) {
-            errMsg = `[Task] Failed to create poll ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`;
-            warnOwnerString = errMsg;
+            errMsg = `[Schedule] Failed to create poll ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`;
+            dmOwnerString = errMsg;
             logger.warn(errMsg);
             return;
           }
@@ -368,16 +374,40 @@ const checkAndExecuteTasks = async () => {
           };
           await postChat("",'post',mRequestBody);
 
+          let localizeTS = await getAndlocalizeTimeStamp(mBotToken,mTaskOwner,task.next_ts);
+          dmOwnerString= parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS} )
+
 
         } catch (e) {
-          errMsg = `[Task] Executing task for poll_id: ${task.poll_id} to CH:${pollCh} FAILED!`;
-          warnOwnerString = errMsg;
-          logger.verbose(errMsg)
+          errMsg = `[Schedule] Executing task for poll_id: ${task.poll_id} to CH:${pollCh} FAILED!`;
+          dmOwnerString = errMsg;
+          logger.verbose(errMsg);
+          logger.verbose(e);
+          console.log(e);
         }
-
-
-
       }
+
+      try {
+        if(dmOwnerString !== null && mTaskOwner!==null) {
+          let isAppAllowDM = gAppAllowDM;
+          if (gAppAllowDM && pollData?.team !== "" && pollData?.team != null) {
+            const teamConfig = await getTeamOverride(pollData?.team);
+            if (teamConfig.hasOwnProperty("app_allow_dm")) isAppAllowDM = teamConfig.app_allow_dm;
+          }
+          if (gAppAllowDM) {
+            let mRequestBody = {
+              token: mBotToken,
+              channel: mTaskOwner,
+              text: dmOwnerString,
+            };
+            await postChat("", 'post', mRequestBody);
+          }
+        }
+      } catch (e) {
+        logger.error("Can not send DM, you might no have Bot Messages Tab enable! ");
+      }
+      dmOwnerString=null;
+
 
       let taskRunCounter = 1;
       let taskRunMax = gScheduleMaxRun;
@@ -396,12 +426,12 @@ const checkAndExecuteTasks = async () => {
 
       if (task.cron_string && taskIsEnable) {
         // Calculate the next schedule time
-        const nextScheduleTime = calculateNextScheduleTime(task.cron_string);
+        const nextScheduleTime = calculateNextScheduleTime(task.cron_string,null);
 
         if (!nextScheduleTime) {
-          warnOwnerString = `[Task] Error parsing cron_string for poll_id ${task.poll_id} and cron_string ${task.cron_string}`;
+          dmOwnerString = `[Schedule] Error parsing cron_string for poll_id ${task.poll_id} and cron_string ${task.cron_string}`;
 
-          console.error(warnOwnerString);
+          console.error(dmOwnerString);
           // Set cron_string to null when it's invalid
           await scheduleCol.updateOne(
               { _id: task._id },
@@ -417,8 +447,8 @@ const checkAndExecuteTasks = async () => {
         if (timeDifferenceHr < gScheduleLimitHr) {
           // Check if next_ts_warn is false or null or not set (only allow once)
           if (!task.next_ts_warn) {
-            warnOwnerString = `[Task] ${task.poll_id} First scheduled job and next one is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours).`;
-            logger.warn(warnOwnerString);
+            dmOwnerString = `[Schedule] ${task.poll_id} First scheduled job and next one is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours).`;
+            logger.warn(dmOwnerString);
             // Set next_ts_warn to true
             await scheduleCol.updateOne(
                 { _id: task._id },
@@ -427,8 +457,8 @@ const checkAndExecuteTasks = async () => {
             nextScheduleValid = true;
             nextWarn= true;
           } else {
-            warnOwnerString = `[Task] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Job is now disabled.`;
-            logger.error(warnOwnerString);
+            dmOwnerString = `[Schedule] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Job is now disabled.`;
+            logger.error(dmOwnerString);
             // Set next_ts_warn to false and cron_string to null
             await scheduleCol.updateOne(
                 { _id: task._id },
@@ -450,22 +480,27 @@ const checkAndExecuteTasks = async () => {
 
       }//end cron_string
 
-
-      let isAppAllowDM = gAppAllowDM;
-      if(gAppAllowDM && pollData?.team !== "" && pollData?.team != null) {
-        const teamConfig = await getTeamOverride(pollData?.team);
-        if(teamConfig.hasOwnProperty("app_allow_dm")) isAppAllowDM = teamConfig.app_allow_dm;
-
+      try {
+        if(dmOwnerString !== null && mTaskOwner!==null) {
+          let isAppAllowDM = gAppAllowDM;
+          if (gAppAllowDM && pollData?.team !== "" && pollData?.team != null) {
+            const teamConfig = await getTeamOverride(pollData?.team);
+            if (teamConfig.hasOwnProperty("app_allow_dm")) isAppAllowDM = teamConfig.app_allow_dm;
+          }
+          if (gAppAllowDM) {
+            let mRequestBody = {
+              token: mBotToken,
+              channel: mTaskOwner,
+              text: dmOwnerString,
+            };
+            await postChat("", 'post', mRequestBody);
+          }
+        }
+      } catch (e) {
+        logger.error("Can not send DM, you might no have Bot Messages Tab enable! ");
       }
+      dmOwnerString=null;
 
-      if(warnOwnerString !== null && mTaskOwner!==null && gAppAllowDM) {
-        let mRequestBody = {
-          token: mBotToken,
-          channel: mTaskOwner,
-          text: warnOwnerString,
-        };
-        await postChat("",'post',mRequestBody);
-      }
     }
   } catch (e) {
     logger.error(e);
@@ -801,7 +836,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Hello, here is how to create a poll with OpenPoll+.",
+              text: "*Hello*, here is how to create a poll with OpenPoll+.",
             },
           },
           {
@@ -819,14 +854,14 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*From command*\nJust typing `/"+slackCommand+"` where you type the message, following with options (see below) and your choices surrounding by quotes.\nBe careful, this way open the shortcuts. But you just need to ignore it and continue typing options and choices.",
+              text: "*From command*\nJust type `/"+slackCommand+"` where you type the message and press Enter without any options. A modal dialog will pop up and guide you to create one.\n\nIf you want to create one with single line of command, please add options, question and your choices. For both question and your choices please surround it with \"quotes\"",
             },
           },
           {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*From shortcuts*\nOpen shortcuts (lightning bolt below to message input, or just type `/` into message input) and type \"poll\"",
+              text: "*From shortcuts*\nOpen shortcuts and select \"Create Poll\"",
             },
           },
           {
@@ -841,7 +876,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "When you create a poll, a red button will appear at bottom of your poll.\nOnly the creator can delete a poll.",
+              text: "Click Menu and select Delete at your poll.\nOnly the creator can delete a poll.",
             },
           },
           {
@@ -912,7 +947,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "input",
             element: {
               type: "plain_text_input",
-              initial_value: "/poll \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""
+              initial_value: "/"+slackCommand+" \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""
             },
             label: {
               type: "plain_text",
@@ -931,7 +966,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "input",
             element: {
               type: "plain_text_input",
-              initial_value: "/poll anonymous \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
+              initial_value: "/"+slackCommand+" anonymous \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
             },
             label: {
               type: "plain_text",
@@ -950,7 +985,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "input",
             element: {
               type: "plain_text_input",
-              initial_value: "/poll limit 2 \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
+              initial_value: "/"+slackCommand+" limit 2 \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
             },
             label: {
               type: "plain_text",
@@ -969,7 +1004,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "input",
             element: {
               type: "plain_text_input",
-              initial_value: "/poll hidden \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
+              initial_value: "/"+slackCommand+" hidden \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
             },
             label: {
               type: "plain_text",
@@ -988,7 +1023,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "input",
             element: {
               type: "plain_text_input",
-              initial_value: "/poll anonymous limit 2 \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
+              initial_value: "/"+slackCommand+" anonymous limit 2 \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
             },
             label: {
               type: "plain_text",
@@ -1032,13 +1067,47 @@ app.event('app_home_opened', async ({ event, client, context }) => {
               emoji: true,
             },
           },
+
           {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]",
+              text: "*Create Schedule and Recurring poll*",
             },
           },
+          {
+            type: "input",
+            element: {
+              type: "plain_text_input",
+              initial_value: "/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]",
+            },
+            label: {
+              type: "plain_text",
+              text: " ",
+              emoji: true,
+            },
+          },
+
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: "- Bot MUST in the channel.\n" +
+                  "- Only one schedule for each poll, reschedule will replace previous one.\n" +
+                  "- `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`).\n" +
+                  "  - To get Poll ID: go to exist poll > `Menu` > `Command Info.`.\n" +
+                  "- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).\n" +
+                  "- `CH_ID` = (Optional) channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).\n" +
+                  "  - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.\n" +
+                  "- `CRON_EXP` = (Optional) do not set to run once, or put [cron expression] in UTC (with \"\")here (eg. `\"0 30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
+                  "- `MAX_RUN` = (Optional) do not set to run maximum time that server allows (`"+gScheduleMaxRun+"` times), After Run Counter greater than this number; schedule will disable itself.\n" +
+                  "\n" +
+                  "NOTE: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n" +
+                  "For more information please visit <"+helpLink+"|full document here>.",
+            },
+          },
+
+
           {
             type: "divider",
           },
@@ -1098,6 +1167,15 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
   if(teamConfig.hasOwnProperty("true_anonymous")) isTrueAnonymous = teamConfig.true_anonymous;
   if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
   if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
+
+  let myTz = null;
+  try {
+    const userInfo = await app.client.users.info({
+      token: context.botToken,
+      user: userId
+    });
+    myTz = userInfo?.user?.tz;
+  } catch (e) { }
 
   if (isHelp) {
     const blocks = [
@@ -1258,7 +1336,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`)" +
               "\n- `CH_ID` = (Optional) channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
               "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
-              "\n- `CRON_EXP` = (Optional) empty for run once, or put \"<https://github.com/harrisiirak/cron-parser#supported-format|[cron expression]>\" (with \"\")" +
+              "\n- `CRON_EXP` = (Optional) empty for run once, or put \"<https://github.com/harrisiirak/cron-parser#supported-format|[cron expression]>\" in UTC (with \"\")" +
               "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possable." +
               "",
         },
@@ -1599,7 +1677,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               if(cmdBody==="") isEndOfCmd = true;
 
               //test cron
-              const nextScheduleTime = calculateNextScheduleTime(inputPara);
+              const nextScheduleTime = calculateNextScheduleTime(inputPara,null);
 
               if (!nextScheduleTime) {
                 let mRequestBody = {
@@ -1672,7 +1750,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             };
             await postChat(body.response_url,'ephemeral',mRequestBody);
 
-            logger.verbose(`[Task] New schedule, Poll ID: ${schPollID}`);
+            logger.verbose(`[Schedule] New schedule, Poll ID: ${schPollID}`);
             return;
 
           } else if (cmdMode==='delete') {
@@ -1777,15 +1855,15 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           for (const item of queryRes) {
             resString+="```";
             resString+=`Poll ID: ${item.poll_id}\n`;
-            resString+=`Next Run: ${item.next_ts}\n`;
-            resString+=`Cron Expression: ${item.cron_string}\n`;
+            resString+=`Next Run: `+localizeTimeStamp(myTz,item.next_ts)+`\n`;
+            resString+=`Cron Expression: ${item.cron_string} (UTC Time Zone)\n`;
             resString+=`Enable: ${item.is_enable}\n`;
             resString+=`Override CH: ${item.poll_ch}\n`;
             //resString+=`Question : ${item.pollData?.question}\n`;
             resString+=`CMD : ${item.pollData?.cmd}\n`;
             resString+=`Run Counter : ${item.run_counter}/${item.run_max??gScheduleMaxRun}\n`;
             resString+=`Last Error : ${item.last_error_text}\n`;
-            resString+=`Last Error TS : ${item.last_error_ts}\n`;
+            resString+=`Last Error TS : `+localizeTimeStamp(myTz,item.last_error_ts)+`\n`;
             resString+="```\n";
             foundCount++;
           }
@@ -1793,7 +1871,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
-            text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount} ) + resString,
+            text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount,slack_command:slackCommand} ) +"\n"+ resString,
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
@@ -1837,15 +1915,15 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             resString+="```";
             resString+=`Poll ID: ${item.poll_id}\n`;
             resString+=`Owner: ${item.created_user_id}\n`;
-            resString+=`Next Run: ${item.next_ts}\n`;
-            resString+=`Cron Expression: ${item.cron_string}\n`;
+            resString+=`Next Run: `+localizeTimeStamp(myTz,item.next_ts)+`\n`;
+            resString+=`Cron Expression: ${item.cron_string} (UTC Time Zone)\n`;
             resString+=`Enable: ${item.is_enable}\n`;
             resString+=`Override CH: ${item.poll_ch}\n`;
             //resString+=`Question : ${item.pollData?.question}\n`;
             resString+=`CMD : ${item.pollData?.cmd}\n`;
             resString+=`Run Counter : ${item.run_counter}/${item.run_max??gScheduleMaxRun}\n`;
             resString+=`Last Error : ${item.last_error_text}\n`;
-            resString+=`Last Error TS : ${item.last_error_ts}\n`;
+            resString+=`Last Error TS : `+localizeTimeStamp(myTz,item.last_error_ts)+`\n`;
             resString+="```\n";
             foundCount++;
           }
@@ -1853,7 +1931,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
-            text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount} ) + resString,
+            text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount,slack_command:slackCommand} ) +"\n"+ resString,
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
@@ -1878,19 +1956,20 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let teamId = getTeamOrEnterpriseId(context);
           logger.debug("TeamID:" + teamId);
 
-          const userInfo = await app.client.users.info({
-            token: context.botToken,
-            user: userId
-          });
-
+          // const userInfo = await app.client.users.info({
+          //   token: context.botToken,
+          //   user: userId
+          // });
+          //
           const testDate = new Date();
-          const testDateStr = testDate.toDateString();
+          const testDateStr = testDate.toString();
           let mRequestBody = {
             token: context.botToken,
             channel: cmdBody,
             //blocks: blocks,
-            text: `TEST MSG TO ${cmdBody} from ${userId} Date ${testDateStr}}\n` +
-                `Your time zone is: ${userInfo?.user?.tz} (${userInfo?.user?.tz_label}, Offset: ${userInfo?.user?.tz_offset} seconds)`
+            text: `UserID ${userId} Date ${testDateStr}}\n` +
+                //`Your time zone is: ${userInfo?.user?.tz} (${userInfo?.user?.tz_label}, Offset: ${userInfo?.user?.tz_offset} seconds)\n`+
+                (await getAndlocalizeTimeStamp(context.botToken,userId,testDate))
             ,
           };
           //logger.debug(mRequestBody);
@@ -1899,7 +1978,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         } catch (e)
         {
           logger.debug("Error: Failed to get user timezone");
-          logger.debug(e);
+          logger.debug(e.toString()+"\n"+e.stack);
         }
 
 
@@ -3843,15 +3922,15 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
       };
       await postChat(response_url, 'ephemeral', mRequestBody);
 
-      logger.verbose(`[TASK] New task create from UI (PollID:${pollID})`);
+      logger.verbose(`[Schedule] New task create from UI (PollID:${pollID})`);
     }
     catch (e) {
-      logger.error(`[TASK] New task create from UI (PollID:${pollID}) ERROR`);
+      logger.error(`[Schedule] New task create from UI (PollID:${pollID}) ERROR`);
       logger.error(e);
       let mRequestBody = {
         token: context.botToken,
         channel: channel,
-        text: "[TASK] Scheduled Error"
+        text: "[Schedule] Scheduled Error"
       };
       await postChat(response_url, 'ephemeral', mRequestBody);
     }
@@ -5367,4 +5446,48 @@ function isValidISO8601(inputTS) {
   } else {
     return false;
   }
+}
+
+async function getAndlocalizeTimeStamp(botToken, userId, mongoDateObject) {
+  const timeFormat = 'ddd MMM DD YYYY HH:mm:ss [GMT]ZZ';
+  if (botToken == null || botToken === "" || userId == null || userId === "") return moment(mongoDateObject).format(timeFormat);
+  try {
+    const userInfo = await app.client.users.info({
+      token: botToken,
+      user: userId
+    });
+
+    //`Your time zone is: ${userInfo?.user?.tz} (${userInfo?.user?.tz_label}, Offset: ${userInfo?.user?.tz_offset} seconds)`
+    return localizeTimeStamp(userInfo?.user?.tz,  mongoDateObject);
+  } catch (e) {
+    return moment(mongoDateObject).format(timeFormat);
+  }
+}
+
+function localizeTimeStamp(tz,  mongoDateObject) {
+  const timeFormat = 'ddd MMM DD YYYY HH:mm:ss [GMT]ZZ';
+  if(mongoDateObject==null) return null;
+  if(tz===null||tz===undefined) return moment(mongoDateObject).format(timeFormat);
+  try {
+    return moment(mongoDateObject).tz(tz).format(timeFormat) + ` (${tz})`;
+  } catch (e) {
+    return moment(mongoDateObject).format(timeFormat);
+  }
+}
+
+function getIANATimezoneFromISO8601(isoString) {
+  // Parse the ISO 8601 string
+  const momentDate = moment.parseZone(isoString);
+
+  // Get the timezone offset in hours and minutes
+  const offset = momentDate.format('Z'); // e.g., +02:00
+
+  // Optional: Convert offset to IANA timezone name
+  // Note: This might not always be accurate
+  const ianaTimezones = moment.tz.names();
+  const matchingTimezone = ianaTimezones.find(tz => {
+    return moment.tz(tz).format('Z') === offset;
+  });
+
+  return matchingTimezone || offset; // returns IANA timezone name or the offset
 }
