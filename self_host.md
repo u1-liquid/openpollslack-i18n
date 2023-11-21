@@ -40,13 +40,29 @@ Once done, you will be redirected to your app "Basic Information"
 Expand the "Add features and functionality" and activate :
 
 - Interactive Components
+- Event Subscriptions
 - Slash Commands
 - Bots
 - Permissions
 
 #### Interactive Components
-Activate it with the On/Off button. Fill the `Request URL` with `https://YOURHOSTNAME/slack/actions`. Replace `YOURHOSTNAME` with yours. Mine is `https://api.openpoll.slack.alcor.space/slack/actions`. Keep `/slack/actions` at the end !
+Activate it with the On/Off button. Fill the `Request URL` with `https://YOURHOSTNAME/slack/actions`. Replace `YOURHOSTNAME` with yours. Keep `/slack/actions` at the end !
 
+#### Event Subscriptions
+Activate it with the On/Off button. Fill the `Request URL` with `https://YOURHOSTNAME/slack/events`. Replace `YOURHOSTNAME` with yours. Keep `/slack/events` at the end !
+and add the app_home_opened event under "Subscribe to bot events".
+
+#### Slash Commands
+Inside the "Basic Information" page, click on "Slash Commands" under "Add features and functionality".
+
+In this page, click on "Create New Command" Fill the next fields:
+
+- Command: The name of the command inside slack. Mine is "/openpoll"
+- Request URL: Fill with `https://YOURHOSTNAME/slack/commands` and replace `YOURHOSTNAME` with yours. 
+- Short Description: Describe the command here. Mine is simply "Create a poll"
+- Usage Hint: Give hint to user. Mine is `"What is you favourite color ?" "Red" "Green" "Blue" "Yellow"`
+- Escape channels, users, and links sent to your app: I've not ticked the box. No usage required in the app.
+- 
 #### Shortcut (optional, but useful to your users)
 Create a new shortcut by clicking on `Create New Shortcut`, select `Global` and click on `Next` button. Fill the next fields:
 
@@ -62,16 +78,6 @@ Inside the "Basic Information" page, click on "Bots" under "Add features and fun
 
 In this step, I have deactivated "Messages Tab". Nothing to use it are really implemented in this app.
 
-#### Slash Commands
-Inside the "Basic Information" page, click on "Slash Commands" under "Add features and functionality".
-
-In this page, click on "Create New Command" Fill the next fields:
-
-- Command: The name of the command inside slack. Mine is "/openpoll"
-- Request URL: Fill with `https://YOURHOSTNAME/slack/commands` and replace `YOURHOSTNAME` with yours. Mine is `https://api.openpoll.dev.slack.alcor.space/slack/commands`
-- Short Description: Describe the command here. Mine is simply "Create a poll"
-- Usage Hint: Give hint to user. Mine is `"What is you favourite color ?" "Red" "Green" "Blue" "Yellow"`
-- Escape channels, users, and links sent to your app: I've not ticked the box. No usage required in the app.
 
 #### Permissions
 Inside the "Basic Information" page, click on "Premissions" under "Add features and functionality" or find the "OAuth & Permissions" entry in left menu.
@@ -82,6 +88,7 @@ Under "Scopes" section and "Bot Token Scopes" subsection, click on "Add an OAuth
 
 - `chat:write` : requested by next scope
 - `chat:write.public` : to write in the workspace channels
+- `users:read` : to read user time zone
 - `channels:read`,`groups:read`,`mpim:read` : to check if bot in selected channel (if not using `response_url`)
 
 Also, but optional, in the "Restrict API Token Usage" section, you can add your server IP address to restrict api usage.

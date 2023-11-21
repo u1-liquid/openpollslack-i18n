@@ -51,7 +51,7 @@ const gLogToFile = config.get('log_to_file');
 const gScheduleLimitHr = config.get('schedule_limit_hrs');
 const gScheduleMaxRun = config.get('schedule_max_run');
 
-const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete"];
+const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete","app_allow_dm"];
 
 const client = new MongoClient(config.get('mongo_url'));
 let orgCol = null;
@@ -307,10 +307,12 @@ const checkAndExecuteTasks = async () => {
             }
           } else {
             errMsg = `[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`;
+            warnOwnerString = errMsg;
             isPollValid = false;
           }
         } else {
           errMsg = `[Task] poll_id: ${task.poll_id}: Poll create with older version of App which is not support to create task.`;
+          warnOwnerString = errMsg;
           isPollValid = false;
         }
 
@@ -352,7 +354,9 @@ const checkAndExecuteTasks = async () => {
 
 
           if (null === blocks) {
-            logger.warn(`[Task] Failed to create poll ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`)
+            errMsg = `[Task] Failed to create poll ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`;
+            warnOwnerString = errMsg;
+            logger.warn(errMsg);
             return;
           }
 
@@ -366,7 +370,9 @@ const checkAndExecuteTasks = async () => {
 
 
         } catch (e) {
-          logger.verbose(`[Task] Executing task for poll_id: ${task.poll_id} to CH:${pollCh} FAILED!`)
+          errMsg = `[Task] Executing task for poll_id: ${task.poll_id} to CH:${pollCh} FAILED!`;
+          warnOwnerString = errMsg;
+          logger.verbose(errMsg)
         }
 
 
@@ -421,12 +427,12 @@ const checkAndExecuteTasks = async () => {
             nextScheduleValid = true;
             nextWarn= true;
           } else {
-            warnOwnerString = `[Task] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Disable job.`;
+            warnOwnerString = `[Task] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Job is now disabled.`;
             logger.error(warnOwnerString);
             // Set next_ts_warn to false and cron_string to null
             await scheduleCol.updateOne(
                 { _id: task._id },
-                { $set: { next_ts_warn: false, is_enable: false , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Disable job.`} }
+                { $set: { next_ts_warn: false, is_enable: false , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Job is now disabled.`} }
             );
           }
         }
@@ -445,6 +451,12 @@ const checkAndExecuteTasks = async () => {
       }//end cron_string
 
 
+      let isAppAllowDM = gAppAllowDM;
+      if(gAppAllowDM && pollData?.team !== "" && pollData?.team != null) {
+        const teamConfig = await getTeamOverride(pollData?.team);
+        if(teamConfig.hasOwnProperty("app_allow_dm")) isAppAllowDM = teamConfig.app_allow_dm;
+
+      }
 
       if(warnOwnerString !== null && mTaskOwner!==null && gAppAllowDM) {
         let mRequestBody = {
@@ -789,7 +801,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Hello, here is how to create a poll with OpenPoll.",
+              text: "Hello, here is how to create a poll with OpenPoll+.",
             },
           },
           {
@@ -807,7 +819,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*From command*\nJust typing `/poll` where you type the message, following with options (see below) and your choices surrounding by quotes.\nBe careful, this way open the shortcuts. But you just need to ignore it and continue typing options and choices.",
+              text: "*From command*\nJust typing `/"+slackCommand+"` where you type the message, following with options (see below) and your choices surrounding by quotes.\nBe careful, this way open the shortcuts. But you just need to ignore it and continue typing options and choices.",
             },
           },
           {
@@ -1016,7 +1028,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "header",
             text: {
               type: "plain_text",
-              text: "Recurring poll",
+              text: "Advanced Schedule and Recurring polling",
               emoji: true,
             },
           },
@@ -1024,7 +1036,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "Slack has a feature called \"Workflow\" that allow you to create recurring poll. Check at <https://slack.com/slack-tips/speed-up-poll-creation-with-simple-poll|this example> from slack. But it require a paid plan.",
+              text: "/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]",
             },
           },
           {
@@ -1886,7 +1898,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           return;
         } catch (e)
         {
-          logger.debug("error in test Function");
+          logger.debug("Error: Failed to get user timezone");
           logger.debug(e);
         }
 

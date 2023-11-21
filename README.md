@@ -55,6 +55,7 @@ Usage:
 /poll config read
 /poll config write app_lang [zh_tw/zh_cn/th/ru/kr/jp/fr/es/en/de/(or language file)]
 /poll config write app_lang_user_selectable [true/false]
+/poll config write app_allow_dm [true/false]
 /poll config write menu_at_the_end [true/false]
 /poll config write create_via_cmd_only [true/false]
 /poll config write compact_ui [true/false]
