@@ -1128,7 +1128,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                   "- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).\n" +
                   "- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).\n" +
                   "  - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.\n" +
-                  "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC (with \"\")here (eg. `\"30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
+                  "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC Timezone (with \"Double Quotation\") here (eg. `\"30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
                   "- `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`"+gScheduleMaxRun+"` times), After Run Counter greater than this number; schedule will disable itself.\n" +
                   "\n" +
                   "NOTE: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n" +
@@ -1352,7 +1352,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Schedule/Recurring Poll*',
+          text: '*Advanced Schedule/Recurring Poll*',
         },
       },
       {
@@ -1360,11 +1360,9 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         text: {
           type: 'mrkdwn',
           text: "```\n/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
-              "\n/"+slackCommand+" schedule create_force [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
-              "\n/"+slackCommand+" schedule list_self" +
-              "\n/"+slackCommand+" schedule list_all" +
               "\n/"+slackCommand+" schedule delete [POLL_ID]" +
-              "\n/"+slackCommand+" schedule delete_force [POLL_ID]" +
+              "\n/"+slackCommand+" schedule list_self" +
+              "\n/"+slackCommand+" schedule delete_done" +
               "```",
         },
       },
@@ -1376,11 +1374,12 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               "\n- Only one schedule for each poll, reschedule will replace previous one" +
               "\n- `POLL_ID` = ID of poll to schedule " +
               "\n   - You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
-              "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`)" +
+              "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)" +
               "\n- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
               "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
-              "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/harrisiirak/cron-parser#supported-format|[cron expression]>\" in UTC (with \"\")" +
-              "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possable." +
+              "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format|[cron expression]>\" in UTC Timezone (with \"Double Quotation\")" +
+              "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possible. (`"+gScheduleMaxRun+"` Times)" +
+              "\n\n*NOTE*: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n For more information please visit <"+helpLink+"|full document here>." +
               "",
         },
       },
@@ -1516,7 +1515,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             token: context.botToken,
             channel: channel,
             //blocks: blocks,
-            text: parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
+            text: parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
@@ -1593,7 +1592,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               token: context.botToken,
               channel: channel,
               //blocks: blocks,
-              text: stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})` + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
+              text: stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})` + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
             };
             await postChat(body.response_url,'ephemeral',mRequestBody);
             return;
@@ -1632,7 +1631,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 token: context.botToken,
                 channel: channel,
                 //blocks: blocks,
-                text: parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter:"[TS]"}) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
+                text: parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter:"[TS]"}) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
               };
               await postChat(body.response_url,'ephemeral',mRequestBody);
               return;
@@ -1652,7 +1651,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 token: context.botToken,
                 channel: channel,
                 //blocks: blocks,
-                text: stri18n(userLang, 'task_error_date_invalid') + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
+                text: stri18n(userLang, 'task_error_date_invalid') + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
               };
               await postChat(body.response_url,'ephemeral',mRequestBody);
               return;
@@ -1982,7 +1981,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             token: context.botToken,
             channel: channel,
             //blocks: blocks,
-            text: parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command:slackCommand} ) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand})
+            text: parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command:slackCommand} ) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
