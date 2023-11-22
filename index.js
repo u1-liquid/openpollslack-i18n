@@ -824,7 +824,7 @@ const postChat = async (url,type,requestBody) => {
       ret.message = "Unknown error";
     }
     ret.status = false;
-    return false;
+    return ret;
   }
   ret.status = true;
   return ret;
@@ -3915,7 +3915,21 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
       blocks: blocks,
       text: `Poll : ${question}`,
     };
-    await postChat(response_url,'post',mRequestBody);
+    const postRes = await postChat(response_url,'post',mRequestBody);
+    //console.log(postRes);
+    if(postRes.status === false) {
+      try {
+        let mRequestBody = {
+          token: context.botToken,
+          channel: userId,
+          text: `Error while create poll: \`${cmd}\` \nERROR:${postRes.message}`
+        };
+        await postChat(response_url, 'post', mRequestBody);
+      } catch (e) {
+        //not able to dm user
+        console.log(e);
+      }
+    }
   } else {
     //schedule
     //console.log(postDateTime);
