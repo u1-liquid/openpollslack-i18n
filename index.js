@@ -4070,9 +4070,9 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
   await pollCol.insertOne(pollData);
 
   const pollID = pollData._id;
-  logger.verbose("New Poll:"+pollID)
+  logger.verbose(`[${cmd_via}] New Poll:${pollID})`);
   //logger.debug(pollData)
-  logger.debug("Poll CMD:"+cmd)
+  logger.debug(`Poll CMD:${cmd}`);
 
   button_value.poll_id = pollID;
 
