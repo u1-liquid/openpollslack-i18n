@@ -51,6 +51,7 @@ const gLogLevelBolt = config.get('log_level_bolt');
 const gLogToFile = config.get('log_to_file');
 const gScheduleLimitHr = config.get('schedule_limit_hrs');
 const gScheduleMaxRun = config.get('schedule_max_run');
+const gScheduleAutoDeleteDay = config.get('schedule_auto_delete_invalid_day');
 
 const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete","app_allow_dm"];
 
@@ -117,7 +118,7 @@ if (gLogToFile) {
   if (!fs.existsSync(gLogDir)) {
     fs.mkdirSync(gLogDir);
   }
-  const logTS = moment().format('YYYY-MM-DD_HH_mm_ss');
+  const logTS = moment().format('YYYY-MM-DD');
   const filenameLogApp = path.join(gLogDir, logTS+'_app.log');
   const filenameLogBolt = path.join(gLogDir, logTS+'_bolt.log');
 
@@ -306,8 +307,8 @@ const checkAndExecuteTasks = async () => {
         // Perform poll info checking
         let errMsg = "";
         if(pollData.hasOwnProperty('team') && pollData.hasOwnProperty('channel')) {
-          if(pollData.team != "" && pollData.team != null &&
-              pollData.channel != "" && pollData.channel != null
+          if(pollData.team !== "" && pollData.team != null &&
+              pollData.channel !== "" && pollData.channel != null
           ) {
             //get req info to run task
             const teamInfo = await getTeamInfo(pollData.team);
@@ -346,7 +347,7 @@ const checkAndExecuteTasks = async () => {
 
 
         if(task.hasOwnProperty('poll_ch')) {
-          if(task.poll_ch != "" && task.poll_ch != null ) {
+          if(task.poll_ch !== "" && task.poll_ch != null ) {
             pollCh = task.poll_ch;
           }
         }
@@ -423,7 +424,7 @@ const checkAndExecuteTasks = async () => {
       // Update is_done to true
       await scheduleCol.updateOne(
           { _id: task._id },
-          { $set: { is_done: true, is_enable: false, last_run_ts: new Date(), run_counter: taskRunCounter,run_max: taskRunMax, is_enable: taskIsEnable  } }
+          { $set: { is_done: true, last_run_ts: new Date(), run_counter: taskRunCounter,run_max: taskRunMax, is_enable: taskIsEnable  } }
       );
 
 
@@ -521,12 +522,26 @@ const checkAndExecuteTasks = async () => {
   }
 };
 
-function removeTask(poll_id) {
+const autoCleanupTask = async () => {
+  try {
+    const dateToCleanup = new Date();
+    dateToCleanup.setDate(dateToCleanup.getDate() - gScheduleAutoDeleteDay);
 
-}
+    const deleteRes = await scheduleCol.deleteMany({
+      is_enable: false,
+      next_ts: { $lt: dateToCleanup }
+    });
+
+    logger.verbose(`[Cleanup] Total documents deleted: ${deleteRes.deletedCount}`);
+
+  } catch (e) {
+    logger.error("[Cleanup] Task failed!");
+    logger.error(e);
+  }
+};
 
 const parameterizedString = (str,varArray) => {
-  if(str==undefined) str = `MissingStr`;
+  if(str===undefined) str = `MissingStr ${str}`;
   let outputStr = str;
   for (let key in varArray) {
     if (varArray.hasOwnProperty(key)) {
@@ -547,7 +562,7 @@ const stri18n = (lang,key) => {
     return langDict['en'][key];
   }
   else {
-    return `MissingStr`;
+    return `MissingStr ${key}`;
   }
 }
 
@@ -555,7 +570,7 @@ function getTeamOrEnterpriseId (body) {
   body = JSON.parse(JSON.stringify(body));
   //logger.debug(body);
   if(body.hasOwnProperty('isEnterpriseInstall')) {
-    if(body.isEnterpriseInstall=='true' || body.isEnterpriseInstall == true) {
+    if(body.isEnterpriseInstall==='true' || body.isEnterpriseInstall === true) {
       if(body.hasOwnProperty('enterprise_id')) return body.enterprise_id;
       else if(body.hasOwnProperty('enterpriseId')) return body.enterpriseId;
       else if(body?.enterprise?.id !== undefined) return body.enterprise.id;
@@ -567,7 +582,7 @@ function getTeamOrEnterpriseId (body) {
     }
   }
   else if(body.hasOwnProperty('is_enterprise_install')) {
-    if(body.is_enterprise_install=='true' || body.is_enterprise_install == true ) {
+    if(body.is_enterprise_install==='true' || body.is_enterprise_install === true ) {
       if(body.hasOwnProperty('enterprise_id')) return body.enterprise_id;
       else if(body.hasOwnProperty('enterpriseId')) return body.enterpriseId;
       else if(body?.enterprise?.id !== undefined) return body.enterprise.id;
@@ -752,7 +767,7 @@ const sendMessageUsingUrl = async (url,newMessage) => {
 const postChat = async (url,type,requestBody) => {
   let ret = {status:false,message : "N/A"};
   try {
-    if(isUseResponseUrl && url!=undefined && url!="")
+    if(isUseResponseUrl && url!==undefined && url!=="")
     {
       delete requestBody['token'];
       delete requestBody['channel'];
@@ -1113,7 +1128,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                   "- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).\n" +
                   "- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).\n" +
                   "  - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.\n" +
-                  "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC (with \"\")here (eg. `\"0 30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
+                  "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC (with \"\")here (eg. `\"30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
                   "- `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`"+gScheduleMaxRun+"` times), After Run Counter greater than this number; schedule will disable itself.\n" +
                   "\n" +
                   "NOTE: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n" +
@@ -1374,15 +1389,14 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         text: {
           type: 'mrkdwn',
           text: "Supported cron expression format: ```" +
-              "\n*    *    *    *    *    *" +
-              "\n┬    ┬    ┬    ┬    ┬    ┬" +
-              "\n│    │    │    │    │    |" +
-              "\n│    │    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)" +
-              "\n│    │    │    │    └───── month (1 - 12)" +
-              "\n│    │    │    └────────── day of month (1 - 31, L)" +
-              "\n│    │    └─────────────── hour (0 - 23)" +
-              "\n│    └──────────────────── minute (0 - 59)" +
-              "\n└───────────────────────── second (0 - 59, optional)" +
+              "\n*    *    *    *    *" +
+              "\n┬    ┬    ┬    ┬    ┬" +
+              "\n│    │    │    │    |" +
+              "\n│    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)" +
+              "\n│    │    │    └───── month (1 - 12)" +
+              "\n│    │    └────────── day of month (1 - 31, L)" +
+              "\n│    └─────────────── hour (0 - 23)" +
+              "\n└──────────────────── minute (0 - 59)" +
               "```",
         },
       },
@@ -1392,8 +1406,8 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           type: 'mrkdwn',
           text: "Example:\n"+
               "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
-              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"0 30 12 15 * *\" 12```\n" +
-              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"0 30 12 15 * *\" 12```"
+              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"30 12 15 * *\" 12```\n" +
+              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"30 12 15 * *\" 12```"
         },
       },
       {
@@ -1654,7 +1668,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               }
               cmdBody = cmdBody.substring(inputPara.length).trim();
 
-              if (inputPara!='-') {
+              if (inputPara!=='-') {
                 schCH = inputPara.trim();
 
                 try {
@@ -1689,11 +1703,11 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             if(!isEndOfCmd) {
               let firstQt = cmdBody.indexOf('"');
               let lastQt = cmdBody.lastIndexOf('"');
-              if(firstQt!=0 || lastQt==-1 || firstQt==lastQt) {
+              if(firstQt!==0 || lastQt===-1 || firstQt===lastQt) {
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
-                  text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:cmdBody,error_msg:"Cron Expression should enclosed in double quotation marks \"* * * * * *\""})
+                  text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:cmdBody,error_msg:"Cron Expression should enclosed in double quotation marks \"* * * * *\""})
                 };
                 await postChat(body.response_url,'ephemeral',mRequestBody);
                 return;
@@ -2081,7 +2095,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           return;
         }
 
-        if(body.user_id != validConfigUser) {
+        if(body.user_id !== validConfigUser) {
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
@@ -2126,14 +2140,14 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             isWriteValid = true;
           }
 
-          if(inputPara=="app_lang") {
+          if(inputPara==="app_lang") {
             cmdBody = cmdBody.substring(8).trim();
             isWriteValid = true;
           }
 
           if(isWriteValid) {
             let inputVal = cmdBody.trim();
-            if(inputPara=="app_lang") {
+            if(inputPara==="app_lang") {
               if(!langList.hasOwnProperty(inputVal)){
                 let mRequestBody = {
                   token: context.botToken,
@@ -2273,8 +2287,6 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       };
       await postChat(body.response_url,'ephemeral',mRequestBody);
       return;
-
-      return;
     }
 
     let mRequestBody = {
@@ -2318,11 +2330,14 @@ const createModalBlockInput = (userLang)  => {
   logger.info('Bolt app is running!');
 
   logger.info('Check and start cron jobs.');
-  // Schedule the task checker to run every minute (you can adjust the schedule)
+  // Schedule the task checker to run every minute
   cron.schedule('* * * * *', checkAndExecuteTasks);
+  // Cleanup every day
+  cron.schedule('0 22 * * *', autoCleanupTask);
 
   // Start the task checker immediately
   checkAndExecuteTasks();
+  autoCleanupTask();
 
 })();
 
@@ -2586,7 +2601,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
 
   let userLang = null;
   if(value.hasOwnProperty('user_lang'))
-    if(value.user_lang!="" && value.user_lang != null)
+    if(value.user_lang!=="" && value.user_lang != null)
       userLang = value.user_lang;
 
   if(userLang==null)
@@ -2788,7 +2803,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
           }
           else {
             let choiceNL = blocks[i].text.text.indexOf('\n');
-            if(choiceNL==-1) choiceNL = blocks[i].text.text.length;
+            if(choiceNL===-1) choiceNL = blocks[i].text.text.length;
             const choiceText = blocks[i].text.text.substring(0,choiceNL);
             blocks[i].text.text = `${choiceText}\n${newVoters}`;
           }
@@ -2925,8 +2940,8 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
       let lastestVoteBtnVal = [];
       for (const idx in body.message.blocks) {
         if (body.message.blocks[idx].hasOwnProperty('type') && body.message.blocks[idx].hasOwnProperty('accessory')) {
-          if (body.message.blocks[idx]['type'] == 'section') {
-            if (body.message.blocks[idx]['accessory']['type'] == 'button') {
+          if (body.message.blocks[idx]['type'] === 'section') {
+            if (body.message.blocks[idx]['accessory']['type'] === 'button') {
               if (body.message.blocks[idx]['accessory'].hasOwnProperty('action_id') &&
                   body.message.blocks[idx]['accessory'].hasOwnProperty('value')
               ) {
@@ -2936,7 +2951,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
                   lastestOptionId = voteBtnId;
                   lastestVoteBtnVal = voteBtnVal;
                   if(voteBtnVal.hasOwnProperty('user_lang'))
-                    if(voteBtnVal['user_lang']!="" && voteBtnVal['user_lang'] != null)
+                    if(voteBtnVal['user_lang']!=="" && voteBtnVal['user_lang'] != null)
                       userLang = voteBtnVal['user_lang'];
                   if(voteBtnVal.hasOwnProperty("poll_id")) poll_id = voteBtnVal.poll_id;
                   if(voteBtnVal.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = voteBtnVal.menu_at_the_end;
@@ -2955,7 +2970,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
                   thisChoice = thisChoice.replace(slackNumToEmoji((voteBtnId + 1),userLang) + " ", '');
                 }
 
-                if (thisChoice == value) {
+                if (thisChoice === value) {
                   let mRequestBody = {
                     token: context.botToken,
                     channel: body.channel.id,
@@ -3096,7 +3111,7 @@ async function createModal(context, client, trigger_id,response_url,channel) {
       channel: channel,
     };
 
-    if( isUseResponseUrl && (response_url== "" || response_url==undefined) && isViaCmdOnly) {
+    if( isUseResponseUrl && (response_url=== "" || response_url===undefined) && isViaCmdOnly) {
       let blocks = [
 
         {
@@ -3274,7 +3289,7 @@ async function createModal(context, client, trigger_id,response_url,channel) {
           },
           "value": langKey
         };
-        if(appLang == langKey)
+        if(appLang === langKey)
         {
           defaultOption = thisLangOp;
         }
@@ -3484,7 +3499,7 @@ app.action('modal_select_when', async ({ action, ack, body, client, context }) =
   }
 
   let isNow = true;
-  if(action.selected_option.value=="now") {
+  if(action.selected_option.value==="now") {
     isNow = true;
   } else {
     isNow = false;
@@ -3532,7 +3547,7 @@ app.action('modal_select_when', async ({ action, ack, body, client, context }) =
         //logger.info("Block" +nextIndex +"IS:");
         //logger.info(blocks[nextIndex]);
         if(!foundHintString) {
-          if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type=="context"){
+          if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type==="context"){
             //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
             if(isNow) {
               blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_ch_response_url_auto');
@@ -3684,7 +3699,7 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
       if(blocks.length > nextIndex  ){
         //logger.info("Block" +nextIndex +"IS:");
         //logger.info(blocks[nextIndex]);
-        if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type=="context"){
+        if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type==="context"){
           //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
           if(isChErr) {
             blocks[nextIndex].elements[0].text = stri18n(appLang,'err_poll_ch_exception');
@@ -4470,7 +4485,7 @@ async function commandInfo(body, client, context, value) {
   const pollData = await pollCol.findOne({ _id: new ObjectId(value.p_id) });
   let pollCmd = "NOTFOUND";
   let poll_id = value.p_id.toString();
-  if(poll_id.length == 0) poll_id = "N/A";
+  if(poll_id.length === 0) poll_id = "N/A";
   if (pollData) {
     if(pollData.hasOwnProperty("cmd")) {
       if(pollData.cmd.trim().length > 0) {
@@ -4560,7 +4575,7 @@ async function myVotes(body, client, context) {
 
 
     if(value.hasOwnProperty('user_lang'))
-      if(value.user_lang!="" && value.user_lang != null)
+      if(value.user_lang!=="" && value.user_lang != null)
         userLang = value.user_lang;
 
     if (value.voters.includes(userId)) {
@@ -4645,7 +4660,7 @@ async function usersVotes(body, client, context, value) {
 
   if(value.hasOwnProperty('anonymous') && value.hasOwnProperty('true_anonymous'))
   {
-    if(value.anonymous==true&&value.true_anonymous==true) {
+    if(value.anonymous===true&&value.true_anonymous===true) {
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
@@ -4710,7 +4725,7 @@ async function usersVotes(body, client, context, value) {
 
 
       if(value.hasOwnProperty('user_lang'))
-        if(value.user_lang!="" && value.user_lang != null)
+        if(value.user_lang!=="" && value.user_lang != null)
           userLang = value.user_lang;
 
       votes.push({
@@ -4955,7 +4970,7 @@ async function revealOrHideVotes(body, context, value) {
           }
           else {
             let choiceNL = blocks[i].text.text.indexOf('\n');
-            if(choiceNL==-1) choiceNL = blocks[i].text.text.length;
+            if(choiceNL===-1) choiceNL = blocks[i].text.text.length;
             const choiceText = blocks[i].text.text.substring(0,choiceNL);
             blocks[i].text.text = `${choiceText}\n${newVoters}`;
           }
@@ -5177,7 +5192,7 @@ async function closePoll(body, client, context, value) {
             blocks[i].accessory.value = JSON.stringify(value);
 
             if(value.hasOwnProperty('user_lang'))
-              if(value.user_lang!="" && value.user_lang != null)
+              if(value.user_lang!=="" && value.user_lang != null)
                 userLang = value.user_lang;
 
           }
@@ -5197,7 +5212,7 @@ async function closePoll(body, client, context, value) {
             blocks[i].accessory.value = JSON.stringify(value);
 
             if(value.hasOwnProperty('user_lang'))
-              if(value.user_lang!="" && value.user_lang != null)
+              if(value.user_lang!=="" && value.user_lang != null)
                 userLang = value.user_lang;
           }
         }
@@ -5461,7 +5476,7 @@ function buildVoteBlock(btn_value, option_text, isCompactUI, isShowDivider, isSh
   let voteId = parseInt(btn_value.id);
   let userLang = gAppLang;
   if(btn_value.hasOwnProperty('user_lang'))
-    if(btn_value['user_lang']!="" && btn_value['user_lang'] != null)
+    if(btn_value['user_lang']!=="" && btn_value['user_lang'] != null)
     userLang = btn_value['user_lang'];
   if(isShowNumberInChoice) emojiPrefix = slackNumToEmoji(voteId+1,userLang)+" ";
   if(isShowNumberInChoiceBtn) emojiBthPostfix = " "+slackNumToEmoji(voteId+1,userLang);
@@ -5551,6 +5566,12 @@ function convertHoursToString(hourNumber) {
 
   // Convert fractional hours to minutes
   let minutes = Math.round((hourNumber - hours) * 60);
+
+  // Adjust for when minutes round to 60
+  if (minutes === 60) {
+    hours += 1;
+    minutes = 0;
+  }
 
   // Format the string
   return `${hours}:${minutes.toString().padStart(2, '0')}`;

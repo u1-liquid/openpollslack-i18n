@@ -91,6 +91,7 @@ Usage:
 - `log_dir` folder of log file
 - `schedule_limit_hrs` schedule will deny to re-run if schedule jobs is shorter than this number (hours)
 - `schedule_max_run` Maximum/Default run count for single schedule that can be set.
+- `schedule_auto_delete_invalid_day` Schedules that already finished, done, no longer valid, disabled will be automatically delete after this value(days)
 
 ## Example
 
@@ -175,8 +176,8 @@ Schedule a poll that create by yourself:
 Example:
 ```
 /poll schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00
-/poll schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - "0 30 12 15 * *" 12
-/poll schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 "0 30 12 15 * *" 12
+/poll schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - "30 12 15 * *" 12
+/poll schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 "30 12 15 * *" 12
 ```
 Schedule poll that create by others in your team
 (this command only work on user who install app to Slack only):
@@ -190,29 +191,28 @@ Schedule poll that create by others in your team
 - `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).
 - `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).
   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.
-- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression](https://github.com/harrisiirak/cron-parser#supported-format) in UTC (with "")here (eg. `"0 30 12 15 * *"` , Post poll 12:30 PM on the 15th day of every month in UTC).
+- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression](https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format) in UTC (with "")here (eg. `"30 12 15 * *"` , Post poll 12:30 PM on the 15th day of every month in UTC).
 - `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`schedule_max_run` times), After Run Counter greater than this number; schedule will disable itself.
 
 NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
 
 #### Supported cron expression format
 ```
-*    *    *    *    *    *
-┬    ┬    ┬    ┬    ┬    ┬
-│    │    │    │    │    |
-│    │    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)
-│    │    │    │    └───── month (1 - 12)
-│    │    │    └────────── day of month (1 - 31, L)
-│    │    └─────────────── hour (0 - 23)
-│    └──────────────────── minute (0 - 59)
-└───────────────────────── second (0 - 59, optional)
+*    *    *    *    *
+┬    ┬    ┬    ┬    ┬
+│    │    │    │    |
+│    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)
+│    │    │    └───── month (1 - 12)
+│    │    └────────── day of month (1 - 31, L)
+│    └─────────────── hour (0 - 23)
+└──────────────────── minute (0 - 59)
 ```
 
 ##### Example
-- `0 30 8 * * *` -> at 8:00 AM, Every day
-- `0 0 10 * * 1,3,5` -> at 10:00 AM on every Monday, Wednesday, and Friday.
-- `0 45 13 * * 1-5` -> at 1:45 PM on every Monday to Friday.
-- `0 15 9 * * 5L` -> at 9:15 AM on last Friday of every month.
+- `30 8 * * *` -> at 8:00 AM, Every day
+- `0 10 * * 1,3,5` -> at 10:00 AM on every Monday, Wednesday, and Friday.
+- `45 13 * * 1-5` -> at 1:45 PM on every Monday to Friday.
+- `15 9 * * 5L` -> at 9:15 AM on last Friday of every month.
 
 ### List Schedule/Recurring Poll
 List all scheduled poll that create by current user:
