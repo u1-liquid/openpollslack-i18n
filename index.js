@@ -287,6 +287,15 @@ const checkAndExecuteTasks = async () => {
       let isPollValid = true;
       let mBotToken = null;
       let mTaskOwner = null;
+
+      let appLang= gAppLang;
+      let isAppAllowDM = gAppAllowDM;
+      if(pollData?.team !== "" && pollData?.team != null) {
+        const teamConfig = await getTeamOverride(pollData?.team);
+        if (teamConfig.hasOwnProperty("app_allow_dm")) isAppAllowDM = teamConfig.app_allow_dm;
+        if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+      }
+
       if(task.hasOwnProperty('created_user_id')) mTaskOwner = task.created_user_id;
 
       if (!pollData) {
@@ -386,15 +395,9 @@ const checkAndExecuteTasks = async () => {
           console.log(e);
         }
       }
-
       try {
         if(dmOwnerString !== null && mTaskOwner!==null) {
-          let isAppAllowDM = gAppAllowDM;
-          if (gAppAllowDM && pollData?.team !== "" && pollData?.team != null) {
-            const teamConfig = await getTeamOverride(pollData?.team);
-            if (teamConfig.hasOwnProperty("app_allow_dm")) isAppAllowDM = teamConfig.app_allow_dm;
-          }
-          if (gAppAllowDM) {
+          if (isAppAllowDM) {
             let mRequestBody = {
               token: mBotToken,
               channel: mTaskOwner,
@@ -404,7 +407,7 @@ const checkAndExecuteTasks = async () => {
           }
         }
       } catch (e) {
-        logger.error("Can not send DM, you might no have Bot Messages Tab enable! ");
+        logger.error("Can not send DM, you might not enable Bot Messages Tab in Slack App!");
       }
       dmOwnerString=null;
 
@@ -447,8 +450,15 @@ const checkAndExecuteTasks = async () => {
         if (timeDifferenceHr < gScheduleLimitHr) {
           // Check if next_ts_warn is false or null or not set (only allow once)
           if (!task.next_ts_warn) {
-            dmOwnerString = `[Schedule] ${task.poll_id} First scheduled job and next one is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours).`;
-            logger.warn(dmOwnerString);
+            dmOwnerString = `[Schedule] ${task.poll_id} First scheduled job and next one is less than ${gScheduleLimitHr} hours (current `+convertHoursToString(timeDifferenceHr)+` hours).`;
+            logger.verbose(dmOwnerString);
+            dmOwnerString = parameterizedString(stri18n(appLang,'task_scheduled_warn_too_fast'),
+                {
+                  poll_id:task.poll_id,
+                  run_max_hrs: gScheduleLimitHr,
+                  run_current_hrs: convertHoursToString(timeDifferenceHr),
+                }
+            );
             // Set next_ts_warn to true
             await scheduleCol.updateOne(
                 { _id: task._id },
@@ -457,13 +467,22 @@ const checkAndExecuteTasks = async () => {
             nextScheduleValid = true;
             nextWarn= true;
           } else {
-            dmOwnerString = `[Schedule] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Job is now disabled.`;
-            logger.error(dmOwnerString);
+            dmOwnerString = `[Schedule] ${task.poll_id} Scheduled job is less than ${gScheduleLimitHr} hours (current `+convertHoursToString(timeDifferenceHr)+` hours). Job is now disabled.`;
+            logger.verbose(dmOwnerString);
             // Set next_ts_warn to false and cron_string to null
             await scheduleCol.updateOne(
                 { _id: task._id },
-                { $set: { next_ts_warn: false, is_enable: false , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${gScheduleLimitHr} hours (current ${timeDifferenceHr} hours). Job is now disabled.`} }
+                { $set: { next_ts_warn: false, is_enable: false , last_error_ts: new Date(), last_error_text: `Scheduled job is less than ${gScheduleLimitHr} hours (current `+convertHoursToString(timeDifferenceHr)+` hours). Job is now disabled.`} }
             );
+
+            dmOwnerString = parameterizedString(stri18n(appLang,'task_scheduled_error_too_fast'),
+                {
+                  poll_id:task.poll_id,
+                  run_max_hrs: gScheduleLimitHr,
+                  run_current_hrs: convertHoursToString(timeDifferenceHr),
+                }
+            );
+
           }
         }
         else {
@@ -482,12 +501,7 @@ const checkAndExecuteTasks = async () => {
 
       try {
         if(dmOwnerString !== null && mTaskOwner!==null) {
-          let isAppAllowDM = gAppAllowDM;
-          if (gAppAllowDM && pollData?.team !== "" && pollData?.team != null) {
-            const teamConfig = await getTeamOverride(pollData?.team);
-            if (teamConfig.hasOwnProperty("app_allow_dm")) isAppAllowDM = teamConfig.app_allow_dm;
-          }
-          if (gAppAllowDM) {
+          if (isAppAllowDM) {
             let mRequestBody = {
               token: mBotToken,
               channel: mTaskOwner,
@@ -497,7 +511,7 @@ const checkAndExecuteTasks = async () => {
           }
         }
       } catch (e) {
-        logger.error("Can not send DM, you might no have Bot Messages Tab enable! ");
+        logger.error("Can not send DM, you might not enable Bot Messages Tab in Slack App!");
       }
       dmOwnerString=null;
 
@@ -1097,10 +1111,10 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                   "- `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`).\n" +
                   "  - To get Poll ID: go to exist poll > `Menu` > `Command Info.`.\n" +
                   "- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).\n" +
-                  "- `CH_ID` = (Optional) channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).\n" +
+                  "- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).\n" +
                   "  - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.\n" +
-                  "- `CRON_EXP` = (Optional) do not set to run once, or put [cron expression] in UTC (with \"\")here (eg. `\"0 30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
-                  "- `MAX_RUN` = (Optional) do not set to run maximum time that server allows (`"+gScheduleMaxRun+"` times), After Run Counter greater than this number; schedule will disable itself.\n" +
+                  "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC (with \"\")here (eg. `\"0 30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
+                  "- `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`"+gScheduleMaxRun+"` times), After Run Counter greater than this number; schedule will disable itself.\n" +
                   "\n" +
                   "NOTE: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n" +
                   "For more information please visit <"+helpLink+"|full document here>.",
@@ -1205,6 +1219,20 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       },
       {
         type: 'divider',
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Create a poll using command*',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options  ',
+        },
       },
       {
         type: 'section',
@@ -1334,9 +1362,9 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               "\n- `POLL_ID` = ID of poll to schedule " +
               "\n   - You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
               "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`)" +
-              "\n- `CH_ID` = (Optional) channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
+              "\n- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
               "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
-              "\n- `CRON_EXP` = (Optional) empty for run once, or put \"<https://github.com/harrisiirak/cron-parser#supported-format|[cron expression]>\" in UTC (with \"\")" +
+              "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/harrisiirak/cron-parser#supported-format|[cron expression]>\" in UTC (with \"\")" +
               "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possable." +
               "",
         },
@@ -2223,7 +2251,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         token: context.botToken,
         channel: channel,
         //blocks: blocks,
-        text: stri18n(userLang,'err_invalid_command')
+        text: `\`${cmd}\`\n`+stri18n(userLang,'err_invalid_command')
         ,
       };
       await postChat(body.response_url,'ephemeral',mRequestBody);
@@ -2231,17 +2259,28 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     }
 
 
-    const blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,"cmd")).blocks;
+
+    let blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,"cmd"));
 
 
     if (null === blocks) {
+      let mRequestBody = {
+        token: context.botToken,
+        channel: channel,
+        //blocks: blocks,
+        text: `\`${cmd}\`\n`+stri18n(userLang,'err_invalid_command')
+        ,
+      };
+      await postChat(body.response_url,'ephemeral',mRequestBody);
+      return;
+
       return;
     }
 
     let mRequestBody = {
       token: context.botToken,
       channel: channel,
-      blocks: blocks,
+      blocks: blocks.blocks,
       text: `Poll : ${question}`,
     };
     await postChat(body.response_url,'post',mRequestBody);
@@ -5490,4 +5529,15 @@ function getIANATimezoneFromISO8601(isoString) {
   });
 
   return matchingTimezone || offset; // returns IANA timezone name or the offset
+}
+
+function convertHoursToString(hourNumber) {
+  // Extract whole hours
+  let hours = Math.floor(hourNumber);
+
+  // Convert fractional hours to minutes
+  let minutes = Math.round((hourNumber - hours) * 60);
+
+  // Format the string
+  return `${hours}:${minutes.toString().padStart(2, '0')}`;
 }
