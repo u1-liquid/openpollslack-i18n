@@ -297,6 +297,12 @@ const checkAndExecuteTasks = async () => {
         if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
       }
 
+      let taskRunCounter = 1;
+      let taskRunMax = gScheduleMaxRun;
+      if(task.hasOwnProperty('run_counter')) taskRunCounter = task.run_counter + 1;
+      if(task.hasOwnProperty('run_max')) taskRunMax = task.run_max;
+      let cmdNote = `Run: ${taskRunCounter} of ${taskRunMax}`;
+
       if(task.hasOwnProperty('created_user_id')) mTaskOwner = task.created_user_id;
 
       if (!pollData) {
@@ -352,7 +358,8 @@ const checkAndExecuteTasks = async () => {
           }
         }
 
-        logger.verbose(`[Schedule] Executing task for poll_id: ${task.poll_id} to CH:${pollCh}`);
+
+        logger.verbose(`[Schedule] Executing task for poll_id: ${task.poll_id} to CH:${pollCh} ${cmdNote}`);
         try {
           // let mRequestBody = {
           //   token: mBotToken,
@@ -365,8 +372,9 @@ const checkAndExecuteTasks = async () => {
           // await postChat("",'post',mRequestBody);
           ///////////////
 
+
           const blocks = (await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
-              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task")).blocks;
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"scheduled",task.poll_id,cmdNote)).blocks;
 
 
           if (null === blocks) {
@@ -385,7 +393,7 @@ const checkAndExecuteTasks = async () => {
           await postChat("",'post',mRequestBody);
 
           let localizeTS = await getAndlocalizeTimeStamp(mBotToken,mTaskOwner,task.next_ts);
-          dmOwnerString= parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS} )
+          dmOwnerString= parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
 
 
         } catch (e) {
@@ -413,10 +421,7 @@ const checkAndExecuteTasks = async () => {
       dmOwnerString=null;
 
 
-      let taskRunCounter = 1;
-      let taskRunMax = gScheduleMaxRun;
-      if(task.hasOwnProperty('run_counter')) taskRunCounter = task.run_counter + 1;
-      if(task.hasOwnProperty('run_max')) taskRunMax = task.run_max;
+
 
       let taskIsEnable = true;
       if(taskRunCounter>=taskRunMax) taskIsEnable = false;
@@ -2273,7 +2278,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
 
 
 
-    let blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,"cmd"));
+    let blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,"cmd",null,null));
 
 
     if (null === blocks) {
@@ -3919,7 +3924,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   if(response_url!==undefined && response_url!=="") cmd_via = "modal_auto"
   else cmd_via = "modal_manual";
 
-  const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via);
+  const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via,null,null);
   const blocks = pollView.blocks;
   const pollID = pollView.poll_id;
   if(postDateTime===null) {
@@ -4054,7 +4059,7 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   return cmd;
 }
 
-async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via) {
+async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via,cmd_via_ref,cmd_via_note) {
   if (
     !question
     || !options
@@ -4090,6 +4095,8 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
     user_id: userId,
     cmd: cmd,
     cmd_via,
+    cmd_via_ref,
+    cmd_via_note,
     question: question,
     options: options,
     para: button_value
@@ -4098,7 +4105,7 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
   await pollCol.insertOne(pollData);
 
   const pollID = pollData._id;
-  logger.verbose(`[${cmd_via}] New Poll:${pollID})`);
+  logger.verbose(`[${cmd_via}] New Poll:${pollID}) ${cmd_via_note}`);
   //logger.debug(pollData)
   logger.debug(`Poll CMD:${cmd}`);
 
@@ -4493,6 +4500,10 @@ async function commandInfo(body, client, context, value) {
     }
   }
 
+  let createdVia = pollData.cmd_via;
+  if(pollData.cmd_via_ref!=null) createdVia += `\nSource ID: ${pollData.cmd_via_ref}`
+  if(pollData.cmd_via_note!=null) createdVia += `\nNote: ${pollData.cmd_via_note}`
+
   let blocks = [
     {
       type: 'section',
@@ -4519,6 +4530,16 @@ async function commandInfo(body, client, context, value) {
       text: {
         type: 'mrkdwn',
         text: "Poll ID: "+poll_id
+      },
+    },
+    {
+      type: 'divider',
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: "Created via: "+createdVia
       },
     }
   ];

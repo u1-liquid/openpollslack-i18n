@@ -1,4 +1,4 @@
-# Self hosted installation (v2)
+# Self hosted installation (v4)
 ## Self hosted installation guide
 ### Requirements
 To use the app you will configure, you need two things:
