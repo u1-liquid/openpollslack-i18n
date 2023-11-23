@@ -33,6 +33,7 @@ const helpEmail = config.get('help_email');
 const supportUrl = config.get('support_url');
 const gAppLang = config.get('app_lang');
 const gAppAllowDM = config.get('app_allow_dm');
+const gAppDatetimeFormat = config.get('app_datetime_format');
 const gIsAppLangSelectable = config.get('app_lang_user_selectable');
 const isUseResponseUrl = config.get('use_response_url');
 const gIsViaCmdOnly = config.get('create_via_cmd_only');
@@ -4124,7 +4125,7 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
   await pollCol.insertOne(pollData);
 
   const pollID = pollData._id;
-  logger.verbose(`[${cmd_via}] New Poll:${pollID}) ${cmd_via_note}`);
+  logger.verbose(`[${cmd_via}] New Poll:${pollID} ${cmd_via_note}`);
   //logger.debug(pollData)
   logger.debug(`Poll CMD:${cmd}`);
 
@@ -5557,7 +5558,9 @@ function isValidISO8601(inputTS) {
 }
 
 async function getAndlocalizeTimeStamp(botToken, userId, mongoDateObject) {
-  const timeFormat = 'ddd MMM DD YYYY HH:mm:ss [GMT]ZZ';
+  //const timeFormat = 'ddd MMM DD YYYY HH:mm:ss [GMT]ZZ';
+  //const iso8601Format = 'YYYY-MM-DDTHH:mm:ssZ'; // ISO 8601 format
+  const timeFormat = gAppDatetimeFormat;
   if (botToken == null || botToken === "" || userId == null || userId === "") return moment(mongoDateObject).format(timeFormat);
   try {
     const userInfo = await app.client.users.info({
@@ -5573,7 +5576,9 @@ async function getAndlocalizeTimeStamp(botToken, userId, mongoDateObject) {
 }
 
 function localizeTimeStamp(tz,  mongoDateObject) {
-  const timeFormat = 'ddd MMM DD YYYY HH:mm:ss [GMT]ZZ';
+  //const timeFormat = 'ddd MMM DD YYYY HH:mm:ss [GMT]ZZ';
+  //const iso8601Format = 'YYYY-MM-DDTHH:mm:ssZ'; // ISO 8601 format
+  const timeFormat = gAppDatetimeFormat;
   if(mongoDateObject==null) return null;
   if(tz===null||tz===undefined) return moment(mongoDateObject).format(timeFormat);
   try {

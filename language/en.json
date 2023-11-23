@@ -90,7 +90,7 @@
   "task_usage_help": "Usage:\n`/{{slack_command}} schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]`\n`/{{slack_command}} schedule delete [POLL_ID]`\n`/{{slack_command}} schedule list_self`\nMore detail:`/{{slack_command}} help` or check <{{help_link}}|full document here>.",
   "task_error_command_invalid": "Invalid command.",
   "task_error_poll_id_invalid": "Invalid Poll ID.",
-  "task_error_date_invalid": "Datetime should be in ISO8601 Format `YYYY-MM-DDTHH:mm:ss.sssZ`",
+  "task_error_date_invalid": "Datetime should be in ISO8601 Format `YYYY-MM-DDTHH:mm:ss.sssZ` , eg. `2023-11-17T21:54:00+07:00`",
   "err_para_missing": "Required parameter `{{parameter}}` is missing.",
   "err_para_invalid": "Value `{{value}}` for parameter `{{parameter}}` is invalid.{{error_msg}}",
   "err_change_vote_poll_closed": "You can't change your votes on closed poll.",

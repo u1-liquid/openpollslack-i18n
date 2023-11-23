@@ -5,6 +5,7 @@
   "app_lang": "en",
   "app_lang_user_selectable": true,
   "app_allow_dm": false,
+  "app_datetime_format": "YYYY-MM-DDTHH:mm:ssZ (ddd)",
   "use_response_url": true,
   "menu_at_the_end": false,
   "create_via_cmd_only": false,
