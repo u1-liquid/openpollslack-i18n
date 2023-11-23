@@ -2983,7 +2983,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
                   if(voteBtnVal.hasOwnProperty("show_divider")) isShowDivider = voteBtnVal.show_divider;
                   if(voteBtnVal.hasOwnProperty("show_help_link")) isShowHelpLink = voteBtnVal.show_help_link;
                   if(voteBtnVal.hasOwnProperty("show_command_info")) isShowCommandInfo = voteBtnVal.show_command_info;
-                  if(voteBtnVal.hasOwnProperty("true_anonymous")) isTrueAnonymous = voteBtnVal.true_anonymous;;
+                  if(voteBtnVal.hasOwnProperty("true_anonymous")) isTrueAnonymous = voteBtnVal.true_anonymous;
                   if(voteBtnVal.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = voteBtnVal.add_number_emoji_to_choice;
                   if(voteBtnVal.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = voteBtnVal.add_number_emoji_to_choice_btn;
 
@@ -4133,56 +4133,84 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
 
   const blocks = [];
   //WARN: value limit is 151 char!
-  const staticSelectElements = [{
-    label: {
-      type: 'plain_text',
-      text: stri18n(userLang,'menu_poll_action'),
+  const staticSelectElements = [
+    {
+      label: {
+        type: 'plain_text',
+        text: stri18n(userLang, 'menu_user_action'),
+      },
+      options: [{
+        text: {
+          type: 'plain_text',
+          text: stri18n(userLang, 'menu_user_self_vote'),
+        },
+        value: JSON.stringify({action: 'btn_my_votes', p_id: pollID, user: userId, user_lang: userLang}),
+      }, {
+        text: {
+          type: 'plain_text',
+          text: stri18n(userLang, 'menu_command_info'),
+        },
+        value: JSON.stringify({action: 'btn_command_info', p_id: pollID, user: userId, user_lang: userLang}),
+      }],
     },
-    options: [{
-      text: {
+    {
+      label: {
         type: 'plain_text',
-        text: isHidden ? stri18n(userLang,'menu_reveal_vote') : stri18n(userLang,'menu_hide_vote'),
+        text: stri18n(userLang, 'menu_poll_action'),
       },
-      value:
-        JSON.stringify({action: 'btn_reveal', revealed: !isHidden, user: userId, user_lang: userLang, z_mat: isMenuAtTheEnd, z_cp:isCompactUI, z_div:isShowDivider,  z_help: isShowHelpLink, z_cmd: isShowCommandInfo}),
-    }, {
-      text: {
-        type: 'plain_text',
-        text: stri18n(userLang,'menu_all_user_vote'),
-      },
-      value: JSON.stringify({action: 'btn_users_votes', user: userId, user_lang: userLang, anonymous: isAnonymous, true_anonymous: isTrueAnonymous}),
-    }, {
-      text: {
-        type: 'plain_text',
-        text: stri18n(userLang,'menu_delete_poll'),
-      },
-      value: JSON.stringify({action: 'btn_delete', p_id:pollID, user: userId, user_lang: userLang}),
-    }, {
-      text: {
-        type: 'plain_text',
-        text: stri18n(userLang,'menu_close_poll'),
-      },
-      value: JSON.stringify({action: 'btn_close', user: userId, user_lang: userLang, z_mat: isMenuAtTheEnd, z_cp:isCompactUI, z_div:isShowDivider, z_help: isShowHelpLink, z_cmd: isShowCommandInfo}),
-    }],
-  }, {
-    label: {
-      type: 'plain_text',
-      text: stri18n(userLang,'menu_user_action'),
-    },
-    options: [{
-      text: {
-        type: 'plain_text',
-        text: stri18n(userLang,'menu_user_self_vote'),
-      },
-      value: JSON.stringify({action: 'btn_my_votes', p_id:pollID, user: userId, user_lang: userLang }),
-    },{
-      text: {
-        type: 'plain_text',
-        text: stri18n(userLang,'menu_command_info'),
-      },
-      value: JSON.stringify({action: 'btn_command_info', p_id:pollID, user: userId, user_lang: userLang }),
-    }],
-  }];
+      options: [{
+        text: {
+          type: 'plain_text',
+          text: isHidden ? stri18n(userLang, 'menu_reveal_vote') : stri18n(userLang, 'menu_hide_vote'),
+        },
+        value:
+            JSON.stringify({
+              action: 'btn_reveal',
+              revealed: !isHidden,
+              user: userId,
+              user_lang: userLang,
+              z_mat: isMenuAtTheEnd ? 1 : 0,
+              z_cp: isCompactUI ? 1 : 0,
+              z_div: isShowDivider ? 1 : 0,
+              z_help: isShowHelpLink ? 1 : 0,
+              z_cmd: isShowCommandInfo ? 1 : 0
+            }),
+      }, {
+        text: {
+          type: 'plain_text',
+          text: stri18n(userLang, 'menu_all_user_vote'),
+        },
+        value: JSON.stringify({
+          action: 'btn_users_votes',
+          user: userId,
+          user_lang: userLang,
+          anonymous: isAnonymous,
+          true_anonymous: isTrueAnonymous
+        }),
+      }, {
+        text: {
+          type: 'plain_text',
+          text: stri18n(userLang, 'menu_close_poll'),
+        },
+        value: JSON.stringify({
+          action: 'btn_close',
+          user: userId,
+          user_lang: userLang,
+          z_mat: isMenuAtTheEnd ? 1 : 0,
+          z_cp: isCompactUI ? 1 : 0,
+          z_div: isShowDivider ? 1 : 0,
+          z_help: isShowHelpLink ? 1 : 0,
+          z_cmd: isShowCommandInfo ? 1 : 0
+        }),
+      }, {
+        text: {
+          type: 'plain_text',
+          text: stri18n(userLang, 'menu_delete_poll'),
+        },
+        value: JSON.stringify({action: 'btn_delete', p_id: pollID, user: userId, user_lang: userLang}),
+      }
+      ],
+    }];
 
   if (supportUrl) {
     staticSelectElements.push({
@@ -4821,15 +4849,15 @@ async function revealOrHideVotes(body, context, value) {
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
-  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = value.z_mat;
+  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = toBoolean(value.z_mat);
   else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
 
   let isCompactUI = gIsCompactUI;
-  if(value.hasOwnProperty("z_cp")) isCompactUI = value.z_cp;
-  else if (teamConfig.hasOwnProperty("show_divider")) isCompactUI = teamConfig.compact_ui;
+  if(value.hasOwnProperty("z_cp")) isCompactUI = toBoolean(value.z_cp);
+  else if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
 
   let isShowDivider = gIsShowDivider;
-  if(value.hasOwnProperty("z_div")) isShowDivider = value.z_div;
+  if(value.hasOwnProperty("z_div")) isShowDivider = toBoolean(value.z_div);
   else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
   if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
   if (
@@ -5142,7 +5170,7 @@ async function closePoll(body, client, context, value) {
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
-  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = value.z_mat;
+  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = toBoolean(value.z_mat);
   else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
 
   if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
@@ -5201,7 +5229,7 @@ async function closePoll(body, client, context, value) {
         const data = await closedCol.findOne({ channel, ts: message.ts });
         if (data === null) {
           await closedCol.insertOne({
-            poll_id: value.p_id,
+            //poll_id: value.p_id,
             team: message.team,
             ts: message.ts,
             closed: false,
@@ -5620,4 +5648,9 @@ function convertHoursToString(hourNumber) {
 
   // Format the string
   return `${hours}:${minutes.toString().padStart(2, '0')}`;
+}
+
+
+function toBoolean(value) {
+  return (value === 1 || value === true);
 }
