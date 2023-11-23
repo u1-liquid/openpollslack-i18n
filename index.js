@@ -770,7 +770,7 @@ const sendMessageUsingUrl = async (url,newMessage) => {
 }
 
 const postChat = async (url,type,requestBody) => {
-  let ret = {status:false,message : "N/A"};
+  let ret = {status:false,message : "N/A",slack_response:null};
   try {
     if(isUseResponseUrl && url!==undefined && url!=="")
     {
@@ -799,7 +799,12 @@ const postChat = async (url,type,requestBody) => {
           ret.message = "Invalid post type:"+type;
           return ret;
       }
-      await sendMessageUsingUrl(url,requestBody);
+      ret.slack_response = await sendMessageUsingUrl(url,requestBody);
+      if(ret.slack_response?.status!==200) {
+        ret.status = false;
+        ret.message = ret.slack_response?.statusText;
+        return ret;
+      }
     }
     else
     {
@@ -2299,7 +2304,21 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       blocks: blocks.blocks,
       text: `Poll : ${question}`,
     };
-    await postChat(body.response_url,'post',mRequestBody);
+    const postRes = await postChat(body.response_url,'post',mRequestBody);
+    if(postRes.status === false) {
+      try {
+        let mRequestBody = {
+          token: context.botToken,
+          channel: userId,
+          text: `Error while create poll: \`${cmd}\` \nERROR:${postRes.message}`
+        };
+        await postChat(body.response_url, 'post', mRequestBody);
+      } catch (e) {
+        //not able to dm user
+        console.log(e);
+      }
+    }
+
   }
 });
 
@@ -2701,7 +2720,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
       //if not exist that mean this choice just add to poll
       if(!poll.hasOwnProperty(value.id))
       {
-        logger.info("Vote array not found creating value.id="+value.id);
+        //logger.info("Vote array not found creating value.id="+value.id);
         poll[value.id] = [];
       }
 
@@ -4112,7 +4131,7 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
   button_value.poll_id = pollID;
 
   const blocks = [];
-  //WARN: there is a limit on how long value can be!
+  //WARN: value limit is 151 char!
   const staticSelectElements = [{
     label: {
       type: 'plain_text',
@@ -5140,7 +5159,6 @@ async function closePoll(body, client, context, value) {
     logger.info('error');
     return;
   }
-
   if (body.user.id !== value.user) {
     logger.debug('reject request because not owner');
     let mRequestBody = {
@@ -5157,6 +5175,7 @@ async function closePoll(body, client, context, value) {
   const message = body.message;
   const channel = body.channel.id;
   const blocks = message.blocks;
+  let userLang = appLang;
 
   if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
     mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
@@ -5181,6 +5200,7 @@ async function closePoll(body, client, context, value) {
         const data = await closedCol.findOne({ channel, ts: message.ts });
         if (data === null) {
           await closedCol.insertOne({
+            poll_id: value.p_id,
             team: message.team,
             ts: message.ts,
             closed: false,
@@ -5196,7 +5216,7 @@ async function closePoll(body, client, context, value) {
         $set: { closed: !isClosed }
       });
 
-      let userLang = appLang;
+
       if (isClosed) {
         for (const i in blocks) {
           const block = blocks[i];
