@@ -29,6 +29,8 @@
   "btn_create": "Create(สร้าง)",
   "btn_cancel": "Cancel(ยกเลิก)",
   "menu_text": "Menu(สำหรับคนถาม)",
+  "menu_title_confirm": "ยืนยัน?",
+  "menu_are_you_sure": "คุณแน่ใจว่าต้องการทำเช่นนี้หรือไม่?",
   "menu_close_poll": "Close the poll(ปิดโหวด)",
   "menu_reopen_poll": "Reopen the poll(เปิดโหวด)",
   "menu_delete_poll": "Delete the poll(ลบออก)",

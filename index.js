@@ -984,10 +984,29 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             },
           },
           {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with  \\"  ',
+            },
+          },
+          {
             type: "input",
             element: {
               type: "plain_text_input",
               initial_value: "/"+slackCommand+" \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""
+            },
+            label: {
+              type: "plain_text",
+              text: " ",
+              emoji: true,
+            },
+          },
+          {
+            type: "input",
+            element: {
+              type: "plain_text_input",
+              initial_value: "/"+slackCommand+" \"Please select \\\"HELLO\\\" ?\" \"HELLO\" \"HELlo\" \"helLo\" \"HE\\\"LL\\\"O\""
             },
             label: {
               type: "plain_text",
@@ -1257,7 +1276,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options  ',
+          text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with  \\"  ',
         },
       },
       {
@@ -1271,7 +1290,14 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+          text: "```\n/"+slackCommand+" \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\".\n```",
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "```\n/"+slackCommand+" \"Please select \\\"HELLO\\\" ?\" \"HELLO\" \"HELlo\" \"helLo\" \"HE\\\"LL\\\"O\"\n```",
         },
       },
       {
@@ -2260,13 +2286,26 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     }
 
     try {
-      const regexp = new RegExp(firstSep+'[^'+firstSep+'\\\\]*(?:\\\\[\S\s][^'+lastSep+'\\\\]*)*'+lastSep, 'g');
-      for (let option of cmdBody.match(regexp)) {
-        let opt = option.substring(1, option.length - 1);
-        if (question === null) {
-          question = opt;
-        } else {
-          options.push(opt);
+      // const regexp = new RegExp(firstSep+'[^'+firstSep+'\\\\]*(?:\\\\[\S\s][^'+lastSep+'\\\\]*)*'+lastSep, 'g');
+      // for (let option of cmdBody.match(regexp)) {
+      //   let opt = option.substring(1, option.length - 1);
+      //   if (question === null) {
+      //     question = opt;
+      //   } else {
+      //     options.push(opt);
+      //   }
+      // }
+      const regexp = new RegExp(`${firstSep}(?:[^${firstSep}\\\\]|\\\\.)*${lastSep}`, 'g');
+
+      const matches = cmdBody.match(regexp);
+      if (matches) {
+        for (let option of matches) {
+          let opt = option.substring(1, option.length - 1).replace(/\\(["'])/g, "$1");
+          if (question === null) {
+            question = opt;
+          } else {
+            options.push(opt);
+          }
         }
       }
     }
@@ -2425,172 +2464,172 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
 
 });
 
-app.action('btn_my_votes', async ({ ack, body, client, context }) => {
-  await ack();
-
-  if (
-    !body.hasOwnProperty('user')
-    || !body.user.hasOwnProperty('id')
-  ) {
-    return;
-  }
-
-  const blocks = body.message.blocks;
-  let votes = [];
-  const userId = body.user.id;
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-  let appLang= gAppLang;
-  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-
-  for (const block of blocks) {
-    if (
-      'section' !== block.type
-      || !block.hasOwnProperty('accessory')
-      || !block.accessory.hasOwnProperty('action_id')
-      || 'btn_vote' !== block.accessory.action_id
-      || !block.accessory.hasOwnProperty('value')
-      || !block.hasOwnProperty('text')
-      || !block.text.hasOwnProperty('text')
-    ) {
-      continue;
-    }
-    const value = JSON.parse(block.accessory.value);
-
-    if (value.voters.includes(userId)) {
-      votes.push({
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: block.text.text,
-        },
-      });
-      votes.push({
-        type: 'divider',
-      });
-    }
-  }
-
-  if (0 === votes.length) {
-    votes.push({
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: stri18n(appLang,'you_have_not_voted'),
-      },
-    });
-  } else {
-    votes.pop();
-  }
-
-  try {
-    await client.views.open({
-      token: context.botToken,
-      trigger_id: body.trigger_id,
-      view: {
-        type: 'modal',
-        title: {
-          type: 'plain_text',
-          text: stri18n(appLang,'info_your_vote'),
-        },
-        close: {
-          type: 'plain_text',
-          text: stri18n(appLang,'info_close'),
-        },
-        blocks: votes,
-      }
-    });
-  } catch (e) {
-    logger.error(e);
-  }
-});
-
-app.action('btn_delete', async ({ action, ack, body, context }) => {
-  await ack();
-
-  if (
-    !body
-    || !body.user
-    || !body.user.id
-    || !body.message
-    || !body.message.ts
-    || !body.channel
-    || !body.channel.id
-    || !action
-    || !action.value
-  ) {
-    logger.info('error');
-    return;
-  }
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-  let appLang= gAppLang;
-  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-
-  if (body.user.id !== action.value) {
-    logger.debug('reject request because not owner');
-    let mRequestBody = {
-      token: context.botToken,
-      channel: body.channel.id,
-      user: body.user.id,
-      attachments: [],
-      text: stri18n(appLang,'can_not_delete_other'),
-    };
-    await postChat(body.response_url,'ephemeral',mRequestBody);
-    return;
-  }
-
-  let mRequestBody = {
-    token: context.botToken,
-    channel: body.channel.id,
-    ts: body.message.ts,
-  };
-  await postChat(body.response_url,'delete',mRequestBody);
-});
-
-app.action('btn_reveal', async ({ action, ack, body, context }) => {
-  await ack();
-
-  if (
-    !body
-    || !body.user
-    || !body.user.id
-    || !body.message
-    || !body.message.ts
-    || !body.message.blocks
-    || !body.channel
-    || !body.channel.id
-    || !action
-    || !action.value
-  ) {
-    logger.info('error');
-    return;
-  }
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-  let appLang= gAppLang;
-  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-  let value = JSON.parse(action.value);
-
-  if (body.user.id !== value.user) {
-    logger.debug('reject request because not owner');
-    let mRequestBody = {
-      token: context.botToken,
-      channel: body.channel.id,
-      user: body.user.id,
-      attachments: [],
-      text: stri18n(appLang,'err_reveal_other'),
-    };
-    await postChat(body.response_url,'ephemeral',mRequestBody);
-    return;
-  }
-
-  let mRequestBody = {
-    token: context.botToken,
-    channel: body.channel.id,
-    user: body.user.id,
-    attachments: [],
-    text: stri18n(appLang,'err_poll_too_old'),
-  };
-  await postChat(body.response_url,'ephemeral',mRequestBody);
-});
+// app.action('btn_my_votes', async ({ ack, body, client, context }) => {
+//   await ack();
+//
+//   if (
+//     !body.hasOwnProperty('user')
+//     || !body.user.hasOwnProperty('id')
+//   ) {
+//     return;
+//   }
+//
+//   const blocks = body.message.blocks;
+//   let votes = [];
+//   const userId = body.user.id;
+//   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+//   let appLang= gAppLang;
+//   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+//
+//   for (const block of blocks) {
+//     if (
+//       'section' !== block.type
+//       || !block.hasOwnProperty('accessory')
+//       || !block.accessory.hasOwnProperty('action_id')
+//       || 'btn_vote' !== block.accessory.action_id
+//       || !block.accessory.hasOwnProperty('value')
+//       || !block.hasOwnProperty('text')
+//       || !block.text.hasOwnProperty('text')
+//     ) {
+//       continue;
+//     }
+//     const value = JSON.parse(block.accessory.value);
+//
+//     if (value.voters.includes(userId)) {
+//       votes.push({
+//         type: 'section',
+//         text: {
+//           type: 'mrkdwn',
+//           text: block.text.text,
+//         },
+//       });
+//       votes.push({
+//         type: 'divider',
+//       });
+//     }
+//   }
+//
+//   if (0 === votes.length) {
+//     votes.push({
+//       type: 'section',
+//       text: {
+//         type: 'mrkdwn',
+//         text: stri18n(appLang,'you_have_not_voted'),
+//       },
+//     });
+//   } else {
+//     votes.pop();
+//   }
+//
+//   try {
+//     await client.views.open({
+//       token: context.botToken,
+//       trigger_id: body.trigger_id,
+//       view: {
+//         type: 'modal',
+//         title: {
+//           type: 'plain_text',
+//           text: stri18n(appLang,'info_your_vote'),
+//         },
+//         close: {
+//           type: 'plain_text',
+//           text: stri18n(appLang,'info_close'),
+//         },
+//         blocks: votes,
+//       }
+//     });
+//   } catch (e) {
+//     logger.error(e);
+//   }
+// });
+//
+// app.action('btn_delete', async ({ action, ack, body, context }) => {
+//   await ack();
+//
+//   if (
+//     !body
+//     || !body.user
+//     || !body.user.id
+//     || !body.message
+//     || !body.message.ts
+//     || !body.channel
+//     || !body.channel.id
+//     || !action
+//     || !action.value
+//   ) {
+//     logger.info('error');
+//     return;
+//   }
+//   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+//   let appLang= gAppLang;
+//   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+//
+//   if (body.user.id !== action.value) {
+//     logger.debug('reject request because not owner');
+//     let mRequestBody = {
+//       token: context.botToken,
+//       channel: body.channel.id,
+//       user: body.user.id,
+//       attachments: [],
+//       text: stri18n(appLang,'can_not_delete_other'),
+//     };
+//     await postChat(body.response_url,'ephemeral',mRequestBody);
+//     return;
+//   }
+//
+//   let mRequestBody = {
+//     token: context.botToken,
+//     channel: body.channel.id,
+//     ts: body.message.ts,
+//   };
+//   await postChat(body.response_url,'delete',mRequestBody);
+// });
+//
+// app.action('btn_reveal', async ({ action, ack, body, context }) => {
+//   await ack();
+//
+//   if (
+//     !body
+//     || !body.user
+//     || !body.user.id
+//     || !body.message
+//     || !body.message.ts
+//     || !body.message.blocks
+//     || !body.channel
+//     || !body.channel.id
+//     || !action
+//     || !action.value
+//   ) {
+//     logger.info('error');
+//     return;
+//   }
+//   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+//   let appLang= gAppLang;
+//   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+//   let value = JSON.parse(action.value);
+//
+//   if (body.user.id !== value.user) {
+//     logger.debug('reject request because not owner');
+//     let mRequestBody = {
+//       token: context.botToken,
+//       channel: body.channel.id,
+//       user: body.user.id,
+//       attachments: [],
+//       text: stri18n(appLang,'err_reveal_other'),
+//     };
+//     await postChat(body.response_url,'ephemeral',mRequestBody);
+//     return;
+//   }
+//
+//   let mRequestBody = {
+//     token: context.botToken,
+//     channel: body.channel.id,
+//     user: body.user.id,
+//     attachments: [],
+//     text: stri18n(appLang,'err_poll_too_old'),
+//   };
+//   await postChat(body.response_url,'ephemeral',mRequestBody);
+// });
 
 app.action('btn_vote', async ({ action, ack, body, context }) => {
   await ack();
@@ -4033,6 +4072,11 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
 
 });
 
+app.view('modal_delete_confirm', async ({ ack, body, view, context }) => {
+  await ack();
+  const privateMetadata = JSON.parse(view.private_metadata);
+  deletePollConfirm(body, context, privateMetadata);
+});
 function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang) {
   let cmd = `/${slackCommand}`;
   if (isAnonymous) {
@@ -4132,28 +4176,9 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
   button_value.poll_id = pollID;
 
   const blocks = [];
-  //WARN: value limit is 151 char!
+  //WARN: value limit is 151 char! change group will need to change buildMenu
   const staticSelectElements = [
-    {
-      label: {
-        type: 'plain_text',
-        text: stri18n(userLang, 'menu_user_action'),
-      },
-      options: [{
-        text: {
-          type: 'plain_text',
-          text: stri18n(userLang, 'menu_user_self_vote'),
-        },
-        value: JSON.stringify({action: 'btn_my_votes', p_id: pollID, user: userId, user_lang: userLang}),
-      }, {
-        text: {
-          type: 'plain_text',
-          text: stri18n(userLang, 'menu_command_info'),
-        },
-        value: JSON.stringify({action: 'btn_command_info', p_id: pollID, user: userId, user_lang: userLang}),
-      }],
-    },
-    {
+    {//GRP 0
       label: {
         type: 'plain_text',
         text: stri18n(userLang, 'menu_poll_action'),
@@ -4210,6 +4235,25 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
         value: JSON.stringify({action: 'btn_delete', p_id: pollID, user: userId, user_lang: userLang}),
       }
       ],
+    },
+    {//GRP 1
+      label: {
+        type: 'plain_text',
+        text: stri18n(userLang, 'menu_user_action'),
+      },
+      options: [{
+        text: {
+          type: 'plain_text',
+          text: stri18n(userLang, 'menu_user_self_vote'),
+        },
+        value: JSON.stringify({action: 'btn_my_votes', p_id: pollID, user: userId, user_lang: userLang}),
+      }, {
+        text: {
+          type: 'plain_text',
+          text: stri18n(userLang, 'menu_command_info'),
+        },
+        value: JSON.stringify({action: 'btn_command_info', p_id: pollID, user: userId, user_lang: userLang}),
+      }],
     }];
 
   if (supportUrl) {
@@ -4458,7 +4502,7 @@ async function btnActions(args) {
   else if ('btn_reveal' === value.action)
     revealOrHideVotes(body, context, value);
   else if ('btn_delete' === value.action)
-    deletePoll(body, context, value);
+    deletePoll(body, client, context, value);
   else if ('btn_close' === value.action)
     closePoll(body, client, context, value);
 }
@@ -5102,16 +5146,87 @@ async function revealOrHideVotes(body, context, value) {
     await postChat(body.response_url,'ephemeral',mRequestBody);
   }
 }
+async function deletePoll(body, client, context, value) {
+  if (
+      !body
+      || !body.user
+      || !body.user.id
+      || !body.message
+      || !body.message.ts
+      || !body.channel
+      || !body.channel.id
+      || !value
+  ) {
+    logger.info('error');
+    return;
+  }
 
-async function deletePoll(body, context, value) {
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+
+  try {
+    value.channel = {id:body.channel.id};
+    value.message = {ts:body.message.ts};
+    value.response_url = body.response_url;
+
+    if (body.user.id !== value.user) {
+      logger.debug('reject request because not owner');
+      let mRequestBody = {
+        token: context.botToken,
+        channel: value.channel.id,
+        user: body.user.id,
+        attachments: [],
+        text: stri18n(appLang,'err_delete_other'),
+      };
+      await postChat(value.response_url,'ephemeral',mRequestBody);
+      return;
+    }
+
+    await client.views.open({
+      token: context.botToken,
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'modal_delete_confirm',
+        private_metadata: JSON.stringify(value),
+        title: {
+          type: 'plain_text',
+          text: stri18n(appLang,'menu_title_confirm'),
+        },
+        submit: {
+          type: 'plain_text',
+          text: stri18n(appLang,'menu_delete_poll'),
+        },
+        close: {
+          type: 'plain_text',
+          text: stri18n(appLang,'btn_cancel'),
+        },
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: stri18n(appLang,'menu_are_you_sure'),
+            }
+          }
+        ]
+      }
+    });
+  } catch (error) {
+    console.error(error);
+  }
+
+}
+async function deletePollConfirm(body, context, value) {
   if (
     !body
     || !body.user
     || !body.user.id
-    || !body.message
-    || !body.message.ts
-    || !body.channel
-    || !body.channel.id
+    // || !body.message
+    // || !body.message.ts
+    // || !body.channel
+    // || !body.channel.id
     || !value
   ) {
     logger.info('error');
@@ -5124,21 +5239,21 @@ async function deletePoll(body, context, value) {
     logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
-      channel: body.channel.id,
+      channel: value.channel.id,
       user: body.user.id,
       attachments: [],
       text: stri18n(appLang,'err_delete_other'),
     };
-    await postChat(body.response_url,'ephemeral',mRequestBody);
+    await postChat(value.response_url,'ephemeral',mRequestBody);
     return;
   }
 
   let mRequestBody = {
     token: context.botToken,
-    channel: body.channel.id,
-    ts: body.message.ts,
+    channel: value.channel.id,
+    ts: value.message.ts,
   };
-  await postChat(body.response_url,'delete',mRequestBody);
+  await postChat(value.response_url,'delete',mRequestBody);
 
   if(gIsDeleteDataOnRequest) {
     if(value.hasOwnProperty('p_id')) {
@@ -5147,13 +5262,13 @@ async function deletePoll(body, context, value) {
           { _id: new ObjectId(value.p_id) }
       );
       votesCol.deleteOne(
-          { channel: body.channel.id, ts: body.message.ts }
+          { channel: value.channel.id, ts: value.message.ts }
       );
       closedCol.deleteOne(
-          { channel: body.channel.id, ts: body.message.ts }
+          { channel: value.channel.id, ts: value.message.ts }
       );
       hiddenCol.deleteOne(
-          { channel: body.channel.id, ts: body.message.ts }
+          { channel: value.channel.id, ts: value.message.ts }
       );
       scheduleCol.deleteMany(
           { poll_id: new ObjectId(value.p_id) }

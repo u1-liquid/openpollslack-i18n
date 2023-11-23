@@ -29,6 +29,8 @@
   "btn_create": "Create",
   "btn_cancel": "Cancel",
   "menu_text": "Menu",
+  "menu_title_confirm": "Confirm?",
+  "menu_are_you_sure": "Are you sure you want to do this?",
   "menu_close_poll": "Close the poll",
   "menu_reopen_poll": "Reopen the poll",
   "menu_delete_poll": "Delete the poll",

@@ -29,6 +29,8 @@
   "btn_create": "創建",
   "btn_cancel": "取消",
   "menu_text": "菜單",
+  "menu_title_confirm": "確認？",
+  "menu_are_you_sure": "您確定要這樣做嗎？",
   "menu_close_poll": "關閉投票",
   "menu_reopen_poll": "重新開啟投票",
   "menu_delete_poll": "刪除投票",

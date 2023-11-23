@@ -127,6 +127,12 @@ Usage:
 
 For both question and choices, feel free to use Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` ``
 
+If you have "Double Quotation" in your question or choices escaped quotes it with  \" like this
+```
+/poll "Please select \"HELLO\" ?" "HELLO" "HELlo" "helLo" "HE\"LL\"O"
+```
+
+
 ### Anonymous poll
 ```
 /poll anonymous "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
