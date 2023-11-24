@@ -727,6 +727,11 @@ const receiver = new ExpressReceiver({
         ]
       });
       if (team) {
+        logger.info(`Team ${mTeamId} is reinstall app.`)
+        if(team.hasOwnProperty('openPollConfig')) {
+          logger.info(`Team ${mTeamId} is reinstall app with previous config, config will carry over.`)
+          installation.openPollConfig = team.openPollConfig;
+        }
         await orgCol.replaceOne(
             {
               $or: [

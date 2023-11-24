@@ -48,7 +48,7 @@ If you didn't use any of these Feature you might want to use original App here [
 
 If some of your team would like to using different config than what is on default.json you can use `/poll config` .
 - This command only work on user who install app to Slack only
-- If app was re-add to workspace all Override config will be removed
+- If app was re-add to workspace all Override config will be carry over for you
 
 Usage:
 ```
