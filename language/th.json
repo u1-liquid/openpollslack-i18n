@@ -96,17 +96,5 @@
   "err_process_command": "เกิดข้อผิดพลาดขณะประมวลผลคำสั่ง กรุณาตรวจสอบว่าคำสั่งถูกต้อง",
   "err_invalid_command": "คำสั่งไม่ถูกต้อง, ชุดคำสั่ง (ยกเว้นคำถามและตัวเลือก) อาจจะมี *bold* ~strike~ _italics_ หรือ `code` ติดอยู่กรุณาตรวจสอบอีกครั้ง",
   "err_only_installer": "Only user that install this app can use this command",
-  "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock. (กรุณารอสักครู่และลองใหม่)",
-  "emoji_1": ":one:",
-  "emoji_2": ":two:",
-  "emoji_3": ":three:",
-  "emoji_4": ":four:",
-  "emoji_5": ":five:",
-  "emoji_6": ":six:",
-  "emoji_7": ":seven:",
-  "emoji_8": ":eight:",
-  "emoji_9": ":nine:",
-  "emoji_10": ":keycap_ten:",
-  "emoji_11": ":one::one:",
-  "emoji_12": ":one::two:"
+  "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock. (กรุณารอสักครู่และลองใหม่)"
 }

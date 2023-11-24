@@ -98,17 +98,5 @@
   "err_process_command": "명령어 처리 중 오류가 발생했습니다. 확인 후 다시 시도해주세요...",
   "err_invalid_command": "잘못된 명령어이거나 (질문과 선택지를 제외한) 일부 부분에는 굵게, 취소선, 이탤릭체 또는 코드를 사용할 수 있습니다.",
   "err_only_installer": "이 앱을 설치한 사용자만이 이 명령을 사용할 수 있습니다.",
-  "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock.",
-  "emoji_1": ":one:",
-  "emoji_2": ":two:",
-  "emoji_3": ":three:",
-  "emoji_4": ":four:",
-  "emoji_5": ":five:",
-  "emoji_6": ":six:",
-  "emoji_7": ":seven:",
-  "emoji_8": ":eight:",
-  "emoji_9": ":nine:",
-  "emoji_10": ":keycap_ten:",
-  "emoji_11": ":one::one:",
-  "emoji_12": ":one::two:"
+  "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock."
 }

@@ -87,6 +87,7 @@
   "task_scheduled_later": "Select time",
   "task_scheduled_post_on": "Post on:",
   "task_scheduled_post_noti": "Your scheduled poll has been posted.\nPoll ID: `{{poll_id}}`\nCMD:`{{poll_cmd}}`\nScheduled on: `{{ts}}`{{note}}",
+  "task_scheduled_post_noti_error": "There was an error `{{error}}` while trying to post your scheduled poll.\nPoll ID: `{{poll_id}}`\nCMD:`{{poll_cmd}}`\nScheduled on: `{{ts}}`{{note}}",
   "task_scheduled_warn_too_fast": "[Schedule][Warn] Poll ID:`{{poll_id}}` First scheduled job and next one is less than {{run_max_hrs}} hours (current {{run_current_hrs}} hours).",
   "task_scheduled_error_too_fast": "[Schedule][Error] Poll ID:`{{poll_id}}` Scheduled job run more than once in {{run_max_hrs}} hours (current {{run_current_hrs}} hours). Job is now disabled.",
   "task_usage_help": "Usage:\n`/{{slack_command}} schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]`\n`/{{slack_command}} schedule delete [POLL_ID]`\n`/{{slack_command}} schedule list_self`\nMore detail:`/{{slack_command}} help` or check <{{help_link}}|full document here>.",
@@ -117,6 +118,7 @@
   "err_invalid_command": "Invalid command or parts of command (except question and choice) may contains *bold* ~strike~ _italics_ or `code`",
   "err_only_installer": "Only user that install this app can use this command",
   "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock.",
+  "err_slack_limit_choices_max": "Maximum number of choices is `{{slack_limit_choices}}` due to Slack limitation.",
   "emoji_1": ":one:",
   "emoji_2": ":two:",
   "emoji_3": ":three:",
@@ -128,5 +130,9 @@
   "emoji_9": ":nine:",
   "emoji_10": ":keycap_ten:",
   "emoji_11": ":one::one:",
-  "emoji_12": ":one::two:"
+  "emoji_12": ":one::two:",
+  "emoji_13": ":one::three:",
+  "emoji_14": ":one::four:",
+  "emoji_15": ":one::five:",
+  "emoji_16": ":one::six:"
 }

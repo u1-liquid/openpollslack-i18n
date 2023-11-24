@@ -33,6 +33,7 @@ const helpEmail = config.get('help_email');
 const supportUrl = config.get('support_url');
 const gAppLang = config.get('app_lang');
 const gAppAllowDM = config.get('app_allow_dm');
+const gSlackLimitChoices = config.get('slack_limit_choices');
 const gAppDatetimeFormat = config.get('app_datetime_format');
 const gIsAppLangSelectable = config.get('app_lang_user_selectable');
 const isUseResponseUrl = config.get('use_response_url');
@@ -391,10 +392,14 @@ const checkAndExecuteTasks = async () => {
             blocks: blocks,
             text: `Poll : ${pollData.question}`,
           };
-          await postChat("",'post',mRequestBody);
-
+          const postRes = await postChat("",'post',mRequestBody);
           let localizeTS = await getAndlocalizeTimeStamp(mBotToken,mTaskOwner,task.next_ts);
-          dmOwnerString= parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+          if(postRes.status === false) {
+            dmOwnerString= parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti_error'), {error:postRes.message,poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+          } else {
+            dmOwnerString= parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+          }
+
 
 
         } catch (e) {
@@ -812,16 +817,16 @@ const postChat = async (url,type,requestBody) => {
 
         switch (type) {
           case "post":
-            await app.client.chat.postMessage(requestBody);
+            ret.slack_response = await app.client.chat.postMessage(requestBody);
             break;
           case "update":
-            await app.client.chat.update(requestBody);
+            ret.slack_response = await app.client.chat.update(requestBody);
             break;
           case "ephemeral":
-            await app.client.chat.postEphemeral(requestBody);
+            ret.slack_response = await app.client.chat.postEphemeral(requestBody);
             break;
           case "delete":
-            await app.client.chat.delete(requestBody);
+            ret.slack_response = await app.client.chat.delete(requestBody);
             break;
           default:
             logger.error("Invalid post type:"+type)
@@ -845,8 +850,18 @@ const postChat = async (url,type,requestBody) => {
     ) {
       logger.error('Team not found error : ignored');
       ret.message = "Team not found error : ignored";
+    }
+    else if (
+        e && e.data && e.data && e.data.error
+        && 'team_access_not_granted' === e.data.error
+    ) {
+      logger.error('Team not found/not granted error : ignored');
+      ret.message = "Team not found/not grante error : ignored";
     } else {
       logger.error(e);
+      console.log(e);
+      console.log(requestBody);
+      console.trace();
       ret.message = "Unknown error";
     }
     ret.status = false;
@@ -1197,6 +1212,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
   await ack();
 
   let cmdBody = (command && command.text) ? command.text.trim() : null;
+  const fullCmd = `/${slackCommand} ${cmdBody}`;
 
   const isHelp = cmdBody ? 'help' === cmdBody : false;
 
@@ -1497,7 +1513,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
   } else if (!cmdBody) {
     createModal(context, client, body.trigger_id,body.response_url,channel);
   } else {
-    const cmd = `/${slackCommand} ${cmdBody}`;
+    //const cmd = `/${slackCommand} ${cmdBody}`;
     let question = null;
     const options = [];
 
@@ -1551,6 +1567,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             //blocks: blocks,
             text: parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
           };
@@ -1571,6 +1588,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
+              user: userId,
               //blocks: blocks,
               text: stri18n(userLang,'err_only_installer'),
             };
@@ -1597,7 +1615,6 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             try {
               const calObjId =new ObjectId(schPollID);
               chkPollData = await pollCol.findOne({ _id: calObjId  });
-
               if (!chkPollData) {
                 isParaValid = false;
                 idError = "Not found";
@@ -1618,7 +1635,6 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                   idError = "Not Support NO_KEY";
                 }
               }
-              isParaValid = true;
             }
             catch (e) {
               idError = "INVALID";
@@ -1628,32 +1644,35 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
+              user: userId,
               //blocks: blocks,
-              text: stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})` + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
+              text: "```"+fullCmd+"```\n"+stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})` + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
             };
             await postChat(body.response_url,'ephemeral',mRequestBody);
             return;
           } else {
             //check owner
             if(!ignoreOwnerCheck) {
-              if (body.user_id !== chkPollData.user_id) {
+              if (body.user_id !== chkPollData?.user_id) {
                 logger.debug('reject request because not owner');
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
-                  text: stri18n(appLang,'err_action_other')+" (MISMATCH_USER)",
+                  user: userId,
+                  text: "```"+fullCmd+"```\n"+stri18n(appLang,'err_action_other')+" (MISMATCH_USER)",
                 };
                 await postChat(body.response_url,'ephemeral',mRequestBody);
                 return;
               }
             } else {
               //check team
-              if (teamOrEntId !== chkPollData.team) {
+              if (teamOrEntId !== chkPollData?.team) {
                 logger.debug('reject request because not valid team');
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
-                  text: stri18n(appLang,'err_action_other')+" (MISMATCH_TEAM)",
+                  user: userId,
+                  text: "```"+fullCmd+"```\n"+stri18n(appLang,'err_action_other')+" (MISMATCH_TEAM)",
                 };
                 await postChat(body.response_url,'ephemeral',mRequestBody);
                 return;
@@ -1667,8 +1686,9 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               let mRequestBody = {
                 token: context.botToken,
                 channel: channel,
+                user: userId,
                 //blocks: blocks,
-                text: parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter:"[TS]"}) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
+                text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter:"[TS]"}) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
               };
               await postChat(body.response_url,'ephemeral',mRequestBody);
               return;
@@ -1687,8 +1707,9 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               let mRequestBody = {
                 token: context.botToken,
                 channel: channel,
+                user: userId,
                 //blocks: blocks,
-                text: stri18n(userLang, 'task_error_date_invalid') + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
+                text: "```"+fullCmd+"```\n"+stri18n(userLang, 'task_error_date_invalid') + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
               };
               await postChat(body.response_url,'ephemeral',mRequestBody);
               return;
@@ -1714,12 +1735,13 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                   });
                 }
                 catch (e) {
-                  if(e.message.includes('channel_not_found'))
+                  if(e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted'))
                   {
                     let mRequestBody = {
                       token: context.botToken,
                       channel: channel,
-                      text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CH_ID]",value:inputPara,error_msg:"(Bot not in Channel or not found)"})
+                      user: userId,
+                      text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CH_ID]",value:inputPara,error_msg:"(Bot not in Channel or not found)"})
                     };
                     await postChat(body.response_url,'ephemeral',mRequestBody);
                     return;
@@ -1743,7 +1765,8 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
-                  text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:cmdBody,error_msg:"Cron Expression should enclosed in double quotation marks \"* * * * *\""})
+                  user: userId,
+                  text: fullCmd+"\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:cmdBody,error_msg:"Cron Expression should enclosed in double quotation marks \"* * * * *\""})
                 };
                 await postChat(body.response_url,'ephemeral',mRequestBody);
                 return;
@@ -1761,7 +1784,8 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
-                  text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:inputPara,error_msg:"Cron Expression is invalid"})
+                  user: userId,
+                  text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:inputPara,error_msg:"Cron Expression is invalid"})
                 };
                 await postChat(body.response_url,'ephemeral',mRequestBody);
                 return;
@@ -1785,7 +1809,8 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
-                  text: parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[MAX_RUN]",value:inputPara,error_msg:""})
+                  user: userId,
+                  text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[MAX_RUN]",value:inputPara,error_msg:""})
                 };
                 await postChat(body.response_url,'ephemeral',mRequestBody);
                 return;
@@ -1814,15 +1839,16 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 { upsert: true } // Option to insert a new document if no matching document is found
             );
 
-            let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText,poll_ch:schCH,run_max:schMAXRUN});
+            let actString = "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText,poll_ch:schCH,run_max:schMAXRUN});
 
             if(schCron !== null) {
-              actString += "\n"+ parameterizedString(stri18n(userLang, 'task_scheduled_with_cron'),{cron:schCron,run_max_hrs:gScheduleLimitHr});
+              actString += "\n"+parameterizedString(stri18n(userLang, 'task_scheduled_with_cron'),{cron:schCron,run_max_hrs:gScheduleLimitHr});
             }
 
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
+              user: userId,
               text: actString
               ,
             };
@@ -1843,6 +1869,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
+              user: userId,
               //blocks: blocks,
               text: parameterizedString(stri18n(userLang, 'task_delete'), {poll_id:schPollID,deleted_count:deleteRes.deletedCount} )
             };
@@ -1900,6 +1927,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             text: parameterizedString(stri18n(userLang, 'task_delete_multiple'), {deleted_count:deletedCount} ) ,
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
@@ -1949,6 +1977,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount,slack_command:slackCommand} ) +"\n"+ resString,
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
@@ -1960,6 +1989,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
+              user: userId,
               //blocks: blocks,
               text: stri18n(userLang,'err_only_installer'),
             };
@@ -2009,6 +2039,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount,slack_command:slackCommand} ) +"\n"+ resString,
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
@@ -2017,8 +2048,9 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             //blocks: blocks,
-            text: parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command:slackCommand} ) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
+            text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command:slackCommand} ) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
           };
           await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
@@ -2124,6 +2156,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             //blocks: blocks,
             text: `Error while reading config`,
           };
@@ -2135,6 +2168,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             //blocks: blocks,
             text: stri18n(userLang,'err_only_installer'),
           };
@@ -2160,6 +2194,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             //blocks: blocks,
             text: `${configTxt}`,
           };
@@ -2188,6 +2223,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
+                  user: userId,
                   //blocks: blocks,
                   text: `Lang file [${inputVal}] not found`,
                 };
@@ -2204,6 +2240,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
+                  user: userId,
                   //blocks: blocks,
                   text: `Usage: ${inputPara} [true/false]`,
                 };
@@ -2231,6 +2268,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
+                user: userId,
                   //blocks: blocks,
                   text: `Error while update [${inputPara}] to [${inputVal}]`,
               };
@@ -2242,6 +2280,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             //blocks: blocks,
             text: `[${inputPara}] is set to [${inputVal}] for this Team`,
           };
@@ -2253,6 +2292,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             //blocks: blocks,
             text: `[${inputPara}] is not valid config parameter or value is missing\nUsage: ${validWritePara}`,
           };
@@ -2266,6 +2306,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
+            user: userId,
             //blocks: blocks,
             text: `Usage:\n/${slackCommand} config read`+
                   `\n${validWritePara}`
@@ -2313,8 +2354,9 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       let mRequestBody = {
         token: context.botToken,
         channel: channel,
+        user: userId,
         //blocks: blocks,
-        text: `\`${cmd}\`\n`+stri18n(userLang,'err_invalid_command')
+        text: `\`${fullCmd}\`\n`+stri18n(userLang,'err_invalid_command')
         ,
       };
       await postChat(body.response_url,'ephemeral',mRequestBody);
@@ -2322,17 +2364,32 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     }
 
 
+    if(options.length > gSlackLimitChoices) {
+      try {
+        let mRequestBody = {
+          token: context.botToken,
+          channel: channel,
+          user: userId,
+          text: `\`\`\`${fullCmd}\`\`\`\n`+parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
+        };
+        await postChat(body.response_url, 'ephemeral', mRequestBody);
+      } catch (e) {
+        //not able to dm user
+        console.log(e);
+      }
+      return;
+    }
 
-    let blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,"cmd",null,null));
+    let blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, fullCmd,"cmd",null,null));
 
 
     if (null === blocks) {
       let mRequestBody = {
         token: context.botToken,
         channel: channel,
+        user: userId,
         //blocks: blocks,
-        text: `\`${cmd}\`\n`+stri18n(userLang,'err_invalid_command')
-        ,
+        text: `\`${fullCmd}\`\n`+stri18n(userLang,'err_invalid_command')
       };
       await postChat(body.response_url,'ephemeral',mRequestBody);
       return;
@@ -2347,12 +2404,15 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     const postRes = await postChat(body.response_url,'post',mRequestBody);
     if(postRes.status === false) {
       try {
+        logger.debug("Block count:"+blocks?.blocks?.length);
+        console.log(postRes);
         let mRequestBody = {
           token: context.botToken,
-          channel: userId,
-          text: `Error while create poll: \`${cmd}\` \nERROR:${postRes.message}`
+          channel: channel,
+          user: userId,
+          text: `Error while create poll: \`${fullCmd}\` \nERROR:${postRes.message}`
         };
-        await postChat(body.response_url, 'post', mRequestBody);
+        await postChat(body.response_url, 'ephemeral', mRequestBody);
       } catch (e) {
         //not able to dm user
         console.log(e);
@@ -3060,6 +3120,23 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
 
       lastestVoteBtnVal['id'] = (lastestOptionId + 1);
       lastestVoteBtnVal['voters'] = [];
+
+      if(lastestVoteBtnVal['id']+1> gSlackLimitChoices) {
+        try {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: body.channel.id,
+            user: body.user.id,
+            text: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
+          };
+          await postChat(body.response_url, 'ephemeral', mRequestBody);
+        } catch (e) {
+          //not able to dm user
+          console.log(e);
+        }
+        return;
+      }
+
       blocks.splice(newChoiceIndex, 1,buildVoteBlock(lastestVoteBtnVal, value, isCompactUI, isShowDivider, isShowNumberInChoice, isShowNumberInChoiceBtn));
 
       let divSpace = 0;
@@ -3585,7 +3662,7 @@ app.action('modal_select_when', async ({ action, ack, body, client, context }) =
     });
   }
   catch (e) {
-    if(e.message.includes('channel_not_found'))
+    if(e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted'))
     {
       isChFound = false;
     }
@@ -3740,7 +3817,7 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
      });
   }
   catch (e) {
-    if(e.message.includes('channel_not_found'))
+    if(e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted'))
     {
       isChFound = false;
     }
@@ -3983,6 +4060,21 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   if(response_url!==undefined && response_url!=="") cmd_via = "modal_auto"
   else cmd_via = "modal_manual";
 
+  if(options.length > gSlackLimitChoices) {
+    try {
+      let mRequestBody = {
+        token: context.botToken,
+        channel: userId,
+        text: `\`\`\`${cmd}\`\`\`\n`+parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
+      };
+      await postChat("", 'post', mRequestBody);
+    } catch (e) {
+      //not able to dm user
+      console.log(e);
+    }
+    return;
+  }
+
   const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via,null,null);
   const blocks = pollView.blocks;
   const pollID = pollView.poll_id;
@@ -4000,11 +4092,14 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
         let mRequestBody = {
           token: context.botToken,
           channel: userId,
-          text: `Error while create poll: \`${cmd}\` \nERROR:${postRes.message}`
+          text: `Error while create poll: \`\`\`${cmd}\`\`\` \nERROR:${postRes.message}`
         };
         await postChat(response_url, 'post', mRequestBody);
       } catch (e) {
         //not able to dm user
+        console.log("not able to dm user");
+        console.log(postRes);
+        console.trace();
         console.log(e);
       }
     }
@@ -4037,7 +4132,6 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
           dataToInsert, // New document to be inserted
           {upsert: true} // Option to insert a new document if no matching document is found
       );
-
       let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {
         poll_id: pollID,
         ts: isoStr,
@@ -4048,11 +4142,11 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
       let mRequestBody = {
         token: context.botToken,
         channel: channel,
+        user: body.user.id,
         text: actString
         ,
       };
-      await postChat(response_url, 'ephemeral', mRequestBody);
-
+      const postRes = await postChat(response_url, 'ephemeral', mRequestBody);
       logger.verbose(`[Schedule] New task create from UI (PollID:${pollID})`);
     }
     catch (e) {
@@ -4061,6 +4155,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
       let mRequestBody = {
         token: context.botToken,
         channel: channel,
+        user: userId,
         text: "[Schedule] Scheduled Error"
       };
       await postChat(response_url, 'ephemeral', mRequestBody);

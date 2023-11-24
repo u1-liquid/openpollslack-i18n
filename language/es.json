@@ -98,17 +98,5 @@
   "err_process_command": "Error al procesar el comando. Por favor, verifica y vuelve a intentarlo...",
   "err_invalid_command": "Comando no válido o partes del comando (excepto la pregunta y la opción) pueden contener negrita tachado cursiva o código",
   "err_only_installer": "Sólo el usuario que instaló esta aplicación puede utilizar este comando",
-  "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock.",
-  "emoji_1": ":one:",
-  "emoji_2": ":two:",
-  "emoji_3": ":three:",
-  "emoji_4": ":four:",
-  "emoji_5": ":five:",
-  "emoji_6": ":six:",
-  "emoji_7": ":seven:",
-  "emoji_8": ":eight:",
-  "emoji_9": ":nine:",
-  "emoji_10": ":keycap_ten:",
-  "emoji_11": ":one::one:",
-  "emoji_12": ":one::two:"
+  "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock."
 }
