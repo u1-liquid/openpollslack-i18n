@@ -688,7 +688,7 @@ const receiver = new ExpressReceiver({
   //logLevel: gLogLevelBolt,
   clientId: config.get('client_id'),
   clientSecret: config.get('client_secret'),
-  scopes: ['commands', 'chat:write.public', 'chat:write', 'groups:write','channels:read','groups:read','mpim:read'],
+  scopes: ['commands', 'chat:write.public', 'chat:write', 'groups:write','channels:read','groups:read','mpim:read','users:read'],
   stateSecret: config.get('state_secret'),
   endpoints: {
     events: '/slack/events',
