@@ -69,6 +69,25 @@ let migrations = null;
 
 const mutexes = {};
 
+// Define the accepted quotes and the standard quote
+const acceptedQuotes = [
+  `"`,    // Standard Double Quote (U+0022)
+  `“`,    // Left Double Quotation Mark (U+201C)
+  `”`,    // Right Double Quotation Mark (U+201D)
+  `„`,    // Double Low-9 Quotation Mark (U+201E)
+  `‟`,    // Double High-Reversed-9 Quotation Mark (U+201F)
+  // `«`,    // Left-Pointing Double Angle Quotation Mark (U+00AB)
+  // `»`,    // Right-Pointing Double Angle Quotation Mark (U+00BB)
+  `〝`,   // Reversed Double Prime Quotation Mark (U+301D)
+  `〞`,   // Double Prime Quotation Mark (U+301E)
+  `〟`,   // Low Double Prime Quotation Mark (U+301F)
+  // `「`,   // Left Corner Bracket (U+300C, used in CJK languages)
+  // `」`,   // Right Corner Bracket (U+300D, used in CJK languages)
+  // `『`,   // Left White Corner Bracket (U+300E, used in CJK languages)
+  // `』`    // Right White Corner Bracket (U+300F, used in CJK languages)
+];
+const standardQuote = `"`;
+
 console.log('Init Logger..');
 
 const prettyJson = format.printf(info => {
@@ -1007,7 +1026,14 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with  \\"  ',
+              text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with `\\"` and escaped `\\ ` with `\\\\` ',
+            },
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '(Supported double quote: '+getSupportDoubleQuoteToStr()+')',
             },
           },
           {
@@ -1125,16 +1151,16 @@ app.event('app_home_opened', async ({ event, client, context }) => {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Private channel*\nTo create poll in private channels, you need to invite the bot inside with `/invite` command.",
+              text: "*Private channel*\nTo create poll in private channels, please use `/"+slackCommand+"` command. If you using Shortcut or Schedule you need to invite the bot inside with `/invite` command.",
             },
           },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Private messages*\nTo create poll in private messages, you need to invite the bot inside with `/invite` command.",
-            },
-          },
+          // {
+          //   type: "section",
+          //   text: {
+          //     type: "mrkdwn",
+          //     text: "*Private messages*\nTo create poll in private messages, you need to invite the bot inside with `/invite` command.",
+          //   },
+          // },
           {
             type: "divider",
           },
@@ -1178,14 +1204,23 @@ app.event('app_home_opened', async ({ event, client, context }) => {
                   "- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).\n" +
                   "- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).\n" +
                   "  - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.\n" +
-                  "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC Timezone (with \"Double Quotation\") here (eg. `\"30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
+                  "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC Timezone (with \"Double Quote\") here (eg. `\"30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
                   "- `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`"+gScheduleMaxRun+"` times), After Run Counter greater than this number; schedule will disable itself.\n" +
                   "\n" +
                   "NOTE: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n" +
                   "For more information please visit <"+helpLink+"|full document here>.",
             },
           },
-
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: "Example:\n"+
+                  "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
+                  "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"30 12 15 * *\" 12```\n" +
+                  "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"30 12 15 * *\" 12```"
+            },
+          },
 
           {
             type: "divider",
@@ -1217,7 +1252,18 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
   await ack();
 
   let cmdBody = (command && command.text) ? command.text.trim() : null;
-  const fullCmd = `/${slackCommand} ${cmdBody}`;
+
+  // Create a pattern for matching escaped quotes
+  const escapedQuotesPattern = acceptedQuotes.map(q => `\\\\${q}`).join('|');
+
+  // Replace non-standard quotes with the standard quote, but ignore already escaped quotes
+  const acceptedQuotesPattern = acceptedQuotes.filter(q => q !== standardQuote).map(q => `\\${q}`).join('');
+  if(!cmdBody) {
+
+  } else {
+    cmdBody = cmdBody.replace(new RegExp(`(^|[^\\\\])([${acceptedQuotesPattern}])`, 'g'), `$1${standardQuote}`);
+  }
+  const fullCmd = `/${slackCommand} ${cmdBody}`
 
   const isHelp = cmdBody ? 'help' === cmdBody : false;
 
@@ -1297,7 +1343,14 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with  \\"  ',
+          text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with `\\"` and escaped `\\ ` with `\\\\`  ',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '(Supported double quote: '+getSupportDoubleQuoteToStr()+')',
         },
       },
       {
@@ -1435,7 +1488,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)" +
               "\n- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
               "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
-              "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format|[cron expression]>\" in UTC Timezone (with \"Double Quotation\")" +
+              "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format|[cron expression]>\" in UTC Timezone (with \"Double Quote\")" +
               "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possible. (`"+gScheduleMaxRun+"` Times)" +
               "\n\n*NOTE*: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n For more information please visit <"+helpLink+"|full document here>." +
               "",
@@ -1771,7 +1824,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                   token: context.botToken,
                   channel: channel,
                   user: userId,
-                  text: fullCmd+"\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:cmdBody,error_msg:"Cron Expression should enclosed in double quotation marks \"* * * * *\""})
+                  text: fullCmd+"\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:cmdBody,error_msg:"Cron Expression should enclosed in Double Quote marks \"* * * * *\""})
                 };
                 await postChat(body.response_url,'ephemeral',mRequestBody);
                 return;
@@ -2325,14 +2378,16 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       }
     }
 
-    const lastSep = cmdBody.split('').pop();
-    const firstSep = cmdBody.charAt(0);
+    //V1
+    // const lastSep = cmdBody.split('').pop();
+    // const firstSep = cmdBody.charAt(0);
 
     if (isLimited && null === limit) {
       limit = 1;
     }
 
     try {
+      //V1
       // const regexp = new RegExp(firstSep+'[^'+firstSep+'\\\\]*(?:\\\\[\S\s][^'+lastSep+'\\\\]*)*'+lastSep, 'g');
       // for (let option of cmdBody.match(regexp)) {
       //   let opt = option.substring(1, option.length - 1);
@@ -2342,16 +2397,39 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
       //     options.push(opt);
       //   }
       // }
-      const regexp = new RegExp(`${firstSep}(?:[^${firstSep}\\\\]|\\\\.)*${lastSep}`, 'g');
+
+      //V2
+      // const regexp = new RegExp(`${firstSep}(?:[^${firstSep}\\\\]|\\\\.)*${lastSep}`, 'g');
+      // const matches = cmdBody.match(regexp);
+      // if (matches) {
+      //   for (let option of matches) {
+      //     let opt = option.substring(1, option.length - 1).replace(/\\(["'])/g, "$1");
+      //     if (question === null) {
+      //       question = opt;
+      //     } else {
+      //       options.push(opt);
+      //     }
+      //   }
+      // }
+
+      //V3
+      // Build a regular expression that matches the standard double quote
+      const quotePattern = `\\${standardQuote}`;
+      const regexp = new RegExp(`${quotePattern}(?:[^${quotePattern}\\\\]|\\\\.)*${quotePattern}`, 'g');
 
       const matches = cmdBody.match(regexp);
       if (matches) {
         for (let option of matches) {
-          let opt = option.substring(1, option.length - 1).replace(/\\(["'])/g, "$1");
+          // Remove the first and last characters (quotes)
+          let opt = option.substring(1, option.length - 1);
+
+          // For question and options, unescape quotes and double backslashes for user readability
+          let unescapedOpt = opt.replace(new RegExp(escapedQuotesPattern, 'g'), (match) => match[1])
+              .replace(/\\\\/g, "\\");
           if (question === null) {
-            question = opt;
+            question = unescapedOpt;
           } else {
-            options.push(opt);
+            options.push(unescapedOpt);
           }
         }
       }
@@ -3410,7 +3488,7 @@ async function createModal(context, client, trigger_id,response_url,channel) {
         elements: [
           {
             type: 'mrkdwn',
-            text: parameterizedString(stri18n(appLang,'task_scheduled_when_note'),{slack_command:slackCommand}),
+            text: parameterizedString(stri18n(appLang,'task_scheduled_when_note'),{slack_command:slackCommand,bot_name:botName}),
           },
         ],
       },
@@ -4201,12 +4279,13 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
 
   let processingOption = "";
   try{
-
+    question = question.replace(/\\/g, "\\\\");
     question = question.replace(/"/g, "\\\"");
     cmd += ` "${question}"`
 
     for (let option of options) {
       processingOption = option;
+      option = option.replace(/\\/g, "\\\\");
       option = option.replace(/"/g, "\\\"");
       cmd += ` "${option}"`
     }
@@ -5876,4 +5955,8 @@ function convertHoursToString(hourNumber) {
 
 function toBoolean(value) {
   return (value === 1 || value === true);
+}
+
+function getSupportDoubleQuoteToStr() {
+  return acceptedQuotes.map(item => `\`${item}\``).join(' ');
 }

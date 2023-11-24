@@ -127,7 +127,10 @@ Usage:
 
 For both question and choices, feel free to use Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` ``
 
-If you have "Double Quotation" in your question or choices escaped quotes it with  \" like this
+If you have "Double Quotation" in your question or choices, escaped quotes it with `\"`.
+(Supported double quote:  `"` `“` `”` `‟` `„` `〝` `〞` `〟`)
+
+For `\ ` escaped with `\\`
 ```
 /poll "Please select \"HELLO\" ?" "HELLO" "HELlo" "helLo" "HE\"LL\"O"
 ```
@@ -198,7 +201,7 @@ Schedule poll that create by others in your team
 - `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).
 - `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).
   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.
-- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression](https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format) in UTC Timezone (with "Double Quotation") here (eg. `"30 12 15 * *"` , Post poll 12:30 PM on the 15th day of every month in UTC).
+- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression](https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format) in UTC Timezone (with `"`Double Quote`"`) here (eg. `"30 12 15 * *"` , Post poll 12:30 PM on the 15th day of every month in UTC).
 - `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`schedule_max_run` times), After Run Counter greater than this number; schedule will disable itself.
 
 NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
