@@ -376,7 +376,7 @@ const checkAndExecuteTasks = async () => {
 
 
           const blocks = (await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
-              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"scheduled",task.poll_id,cmdNote)).blocks;
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task_schedule",task.poll_id,cmdNote)).blocks;
 
 
           if (null === blocks) {
@@ -4138,7 +4138,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
           dataToInsert, // New document to be inserted
           {upsert: true} // Option to insert a new document if no matching document is found
       );
-      let actString = parameterizedString(stri18n(userLang, 'task_scheduled'), {
+      let actString = "```"+cmd+"```\n"+parameterizedString(stri18n(userLang, 'task_scheduled'), {
         poll_id: pollID,
         ts: isoStr,
         poll_ch: null,
@@ -4696,7 +4696,7 @@ async function commandInfo(body, client, context, value) {
   let createdVia = pollData.cmd_via;
   if(pollData.cmd_via_ref!=null) createdVia += `\nSource ID: ${pollData.cmd_via_ref}`
   if(pollData.cmd_via_note!=null) createdVia += `\nNote: ${pollData.cmd_via_note}`
-
+  if(pollData.cmd_via_ref!=null) createdVia += "\n"+parameterizedString(stri18n(appLang,'task_usage_stop_poll'),{slack_command:slackCommand, poll_id: pollData.cmd_via_ref } );
   let blocks = [
     {
       type: 'section',
