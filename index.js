@@ -395,9 +395,14 @@ const checkAndExecuteTasks = async () => {
           const postRes = await postChat("",'post',mRequestBody);
           let localizeTS = await getAndlocalizeTimeStamp(mBotToken,mTaskOwner,task.next_ts);
           if(postRes.status === false) {
-            dmOwnerString= parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti_error'), {error:postRes.message,poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+            dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti_error'), {error:postRes.message,poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
           } else {
-            dmOwnerString= parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+            if(taskRunCounter>=taskRunMax) {
+              //last one
+              dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti_done'), {info:"",poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} );
+            } else {
+              dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+            }
           }
 
 
@@ -1822,6 +1827,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             const dataToInsert = {
               poll_id: new ObjectId(schPollID),
               next_ts: schTs,
+              created_cmd: fullCmd,
               created_ts: new Date(),
               created_user_id: userId,
               run_max: schMAXRUN,
@@ -5303,6 +5309,13 @@ async function deletePoll(body, client, context, value) {
             text: {
               type: 'mrkdwn',
               text: stri18n(appLang,'menu_are_you_sure'),
+            }
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: stri18n(appLang,'task_delete_refer_warn'),
             }
           }
         ]
