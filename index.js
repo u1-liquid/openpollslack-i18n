@@ -3131,6 +3131,24 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
 
   let userLang = appLang;
 
+  let isClosed = false
+  try {
+    const data = await closedCol.findOne({ channel, ts: message.ts });
+    isClosed = data !== null && data.closed;
+  } catch {}
+
+  if (isClosed) {
+    let mRequestBody = {
+      token: context.botToken,
+      channel: body.channel.id,
+      user: body.user.id,
+      attachments: [],
+      text: stri18n(userLang,'err_change_vote_poll_closed'),
+    };
+    await postChat(body.response_url,'ephemeral',mRequestBody);
+    return;
+  }
+
   if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
     mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
   }
@@ -3347,7 +3365,7 @@ async function createModal(context, client, trigger_id,response_url,channel) {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: parameterizedString(langDict[appLang]['modal_ch_via_cmd_only'],{slack_command:slackCommand,bot_name:botName})
+            text: parameterizedString(stri18n(appLang,'modal_ch_via_cmd_only'),{slack_command:slackCommand,bot_name:botName})
             //text: stri18n(appLang,'modal_ch_via_cmd_only'),
           },
         }
@@ -3437,7 +3455,7 @@ async function createModal(context, client, trigger_id,response_url,channel) {
           elements: [
             {
               type: 'mrkdwn',
-              text: parameterizedString(langDict[appLang][warnStr],{slack_command:slackCommand,bot_name:botName}),
+              text: parameterizedString(stri18n(appLang, warnStr),{slack_command:slackCommand,bot_name:botName}),
             },
           ],
         }
@@ -3778,9 +3796,8 @@ app.action('modal_select_when', async ({ action, ack, body, client, context }) =
         if(!foundHintString) {
           if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type==="context"){
             //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
-            if(isNow) {
-              blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_ch_response_url_auto');
-              //break;
+            if(isNow && privateMetadata?.response_url!== "" && privateMetadata?.response_url && isUseResponseUrl) {
+                blocks[nextIndex].elements[0].text = stri18n(appLang, 'modal_ch_response_url_auto');
             }
             else {
               if(isChErr) {
@@ -3790,7 +3807,7 @@ app.action('modal_select_when', async ({ action, ack, body, client, context }) =
                 blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_bot_in_ch');
               }
               else {
-                blocks[nextIndex].elements[0].text = parameterizedString(langDict[appLang]['modal_bot_not_in_ch'],{slack_command:slackCommand,bot_name:botName})
+                blocks[nextIndex].elements[0].text = parameterizedString(stri18n(appLang,'modal_bot_not_in_ch'),{slack_command:slackCommand,bot_name:botName})
               }
               //break;
             }
@@ -3937,7 +3954,7 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
             blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_bot_in_ch');
           }
           else {
-            blocks[nextIndex].elements[0].text = parameterizedString(langDict[appLang]['modal_bot_not_in_ch'],{slack_command:slackCommand,bot_name:botName})
+            blocks[nextIndex].elements[0].text = parameterizedString(stri18n(appLang,'modal_bot_not_in_ch'),{slack_command:slackCommand,bot_name:botName})
           }
           break;
         }
