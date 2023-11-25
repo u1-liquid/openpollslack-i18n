@@ -1254,10 +1254,18 @@ app.event('app_home_opened', async ({ event, client, context }) => {
 });
 
 app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, say, respond }) => {
-  await ack();
 
+  const receivedTime = new Date().getTime();
+  await ack();
   let cmdBody = (command && command.text) ? command.text.trim() : null;
 
+  if(cmdBody?.startsWith('ping')) {
+    const ackedTime = new Date().getTime();
+    const timeDiff = ackedTime - receivedTime;
+    // Respond with the time difference
+    await respond(`Time from receiving to acknowledging: ${timeDiff} ms`);
+    return;
+  }
   // Create a pattern for matching escaped quotes
   const escapedQuotesPattern = acceptedQuotes.map(q => `\\\\${q}`).join('|');
 
@@ -3988,7 +3996,7 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
 
 app.action('modal_poll_options', async ({ action, ack, body, client, context }) => {
   await ack();
-
+  return; //won't need to process anything anymore
   if (
     !body
     || !body.view
