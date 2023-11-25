@@ -732,6 +732,12 @@ const receiver = new ExpressReceiver({
           logger.info(`Team ${mTeamId} is reinstall app with previous config, config will carry over.`)
           installation.openPollConfig = team.openPollConfig;
         }
+        if(team.hasOwnProperty('created_ts')) {
+          installation.created_ts = team.created_ts;
+        } else {
+          installation.created_ts = new Date();
+        }
+        installation.update_ts = new Date();
         await orgCol.replaceOne(
             {
               $or: [
@@ -740,19 +746,9 @@ const receiver = new ExpressReceiver({
               ]
             }, installation);
       } else {
+        installation.created_ts = new Date();
         await orgCol.insertOne(installation);
       }
-
-      await orgCol.updateOne(
-          {
-            $or: [
-              {'team.id': mTeamId},
-              {'enterprise.id': mTeamId},
-            ]
-          }
-          ,
-          { $set: { created_ts: new Date()} }
-      );
 
       return mTeamId;
     },
