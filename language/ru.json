@@ -3,6 +3,8 @@
   "info_lang_select_hint": "Select Language",
   "info_lang_select_label": "Язык опроса:",
   "info_anonymous": ":shushing_face: Анонимный опрос",
+  "info_anonymous_vote": "Вы проголосовали анонимно в опросе.",
+  "info_anonymous_unvote": "Вы отменили свой анонимный голос в опросе.",
   "info_anonymous_notice": "ПРИМЕЧАНИЕ: Создатель опроса по-прежнему может видеть, кто проголосовал за какие варианты",
   "info_limited": ":warning: Ограничено {{limit}} голосов",
   "info_s": "",

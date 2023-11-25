@@ -3,6 +3,8 @@
   "info_lang_select_hint": "Select Language",
   "info_lang_select_label": "Kyselyn kieli:",
   "info_anonymous": ":shushing_face: Nimetön kysely",
+  "info_anonymous_vote": "Olet äänestänyt anonyymisti kyselyssä.",
+  "info_anonymous_unvote": "Olet perunut anonyymin äänesi kyselyssä.",
   "info_anonymous_notice": "HUOM: Kyselyn luoja voi silti nähdä kuka äänesti mitäkin vaihtoehtoa",
   "info_limited": ":warning: Rajoitettu {{limit}} ääneen",
   "info_s": "s",

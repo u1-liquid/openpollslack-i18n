@@ -2824,6 +2824,11 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
     if(value.user_lang!=="" && value.user_lang != null)
       userLang = value.user_lang;
 
+  let isAnonymous = false;
+  if(value.hasOwnProperty('anonymous'))
+    if(value.anonymous!=="" && value.anonymous != null)
+      isAnonymous = value.anonymous;
+
   if(userLang==null)
   {
     userLang= gAppLang;
@@ -2862,6 +2867,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
   } while (!release && countTry < 3);
 
   if (release) {
+    let removeVote = false;
     try {
 
       let isClosed = false
@@ -2937,7 +2943,6 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
       let block = blocks[context_id];
       let voters = value.voters ? value.voters : [];
 
-      let removeVote = false;
 
       if (poll[value.id].includes(user_id)) {
         removeVote = true;
@@ -3077,6 +3082,18 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
 
     } finally {
       release();
+      if(isAnonymous) {
+        let mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_vote'), {choice: ""});
+        if(removeVote) mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_unvote'), {choice: ""});
+        let mRequestBody = {
+          token: context.botToken,
+          channel: body.channel.id,
+          user: body.user.id,
+          attachments: [],
+          text: mesStr
+        };
+        await postChat(body.response_url,'ephemeral',mRequestBody);
+      }
     }
   } else {
     let mRequestBody = {
