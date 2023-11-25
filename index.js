@@ -1721,7 +1721,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             //check owner
             if(!ignoreOwnerCheck) {
               if (body.user_id !== chkPollData?.user_id) {
-                logger.debug('reject request because not owner');
+                //logger.debug('reject request because not owner');
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
@@ -1734,7 +1734,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
             } else {
               //check team
               if (teamOrEntId !== chkPollData?.team) {
-                logger.debug('reject request because not valid team');
+                //logger.debug('reject request because not valid team');
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
@@ -2718,7 +2718,7 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
 //   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 //
 //   if (body.user.id !== action.value) {
-//     logger.debug('reject request because not owner');
+//     //logger.debug('reject request because not owner');
 //     let mRequestBody = {
 //       token: context.botToken,
 //       channel: body.channel.id,
@@ -2762,7 +2762,7 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
 //   let value = JSON.parse(action.value);
 //
 //   if (body.user.id !== value.user) {
-//     logger.debug('reject request because not owner');
+//     //logger.debug('reject request because not owner');
 //     let mRequestBody = {
 //       token: context.botToken,
 //       channel: body.channel.id,
@@ -4980,7 +4980,7 @@ async function usersVotes(body, client, context, value) {
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
-    logger.debug('reject request because not owner');
+    //logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -5149,7 +5149,7 @@ async function revealOrHideVotes(body, context, value) {
   }
 
   if (body.user.id !== value.user) {
-    logger.debug('reject request because not owner');
+    //logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
       channel: body.channel.id,
@@ -5394,7 +5394,7 @@ async function deletePoll(body, client, context, value) {
     value.response_url = body.response_url;
 
     if (body.user.id !== value.user) {
-      logger.debug('reject request because not owner');
+      //logger.debug('reject request because not owner');
       let mRequestBody = {
         token: context.botToken,
         channel: value.channel.id,
@@ -5466,7 +5466,7 @@ async function deletePollConfirm(body, context, value) {
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   if (body.user.id !== value.user) {
-    logger.debug('reject request because not owner');
+    //logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
       channel: value.channel.id,
@@ -5534,7 +5534,7 @@ async function closePoll(body, client, context, value) {
     return;
   }
   if (body.user.id !== value.user) {
-    logger.debug('reject request because not owner');
+    //logger.debug('reject request because not owner');
     let mRequestBody = {
       token: context.botToken,
           channel: body.channel.id,
