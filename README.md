@@ -20,12 +20,14 @@ Open Poll+是用于在Slack中创建调查的免费开源应用程序。
 
 I have made some changes to make it more customizable, such as:
 - Allowing choices to be added by others
-- Schedule/Recurring Poll (Beta)
+- Simple Scheduled Poll
+- Advanced Schedule and Recurring Poll Using Cron Expression
 - True anonymous voting (Poller can't see users' votes if this mode is ON): Default ON
 - Supporting Slack's Enterprise Grid and Slack Connect
-- Create poll in private channel without adding bot to that channel (Except create via shortcut and Schedule Poll )
+- Create poll in private channel without adding bot to that channel using just `/poll`
+  - (Except create via shortcut and Schedule/Recurring Poll which still required adding bot to channel)
 - Customizable UI (Order, Show/Hide elements you don't want to make it cleaner)
-- UI Language, multiple language support (Please feel free to report any mistranslations)
+- i18n, UI Language, multiple language support (Please feel free to report any mistranslations)
 - Separate configuration for each Slack team
 - Better error handling to prevent crashes on the server
 - Log to file
@@ -227,6 +229,7 @@ NOTE: If a cron expression results in having more than 1 job within `schedule_li
 ### List Schedule/Recurring Poll
 List all scheduled poll that create by current user:
 ```
+/poll schedule list
 /poll schedule list_self
 ```
 

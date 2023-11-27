@@ -94,7 +94,7 @@
   "task_scheduled_post_noti_done": "Your scheduled poll has been posted, marking the completion of its final scheduled Recurring Poll.{{info}}\nPoll ID: `{{poll_id}}`\nCMD:`{{poll_cmd}}`\nScheduled on: `{{ts}}`{{note}}",
   "task_scheduled_warn_too_fast": "[Schedule][Warn] Poll ID:`{{poll_id}}` First scheduled job and next one is less than {{run_max_hrs}} hours (current {{run_current_hrs}} hours).",
   "task_scheduled_error_too_fast": "[Schedule][Error] Poll ID:`{{poll_id}}` Scheduled job run more than once in {{run_max_hrs}} hours (current {{run_current_hrs}} hours). Job is now disabled.",
-  "task_usage_help": "Usage:\n`/{{slack_command}} schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]`\n`/{{slack_command}} schedule delete [POLL_ID]`\n`/{{slack_command}} schedule list_self`\nMore detail:`/{{slack_command}} help` or check <{{help_link}}|full document here>.",
+  "task_usage_help": "Usage:\n`/{{slack_command}} schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]`\n`/{{slack_command}} schedule delete [POLL_ID]`\n`/{{slack_command}} schedule list`\nMore detail:`/{{slack_command}} help` or check <{{help_link}}|full document here>.",
   "task_usage_stop_poll": "To stop the schedule:\n`/{{slack_command}} schedule delete {{poll_id}}`",
   "task_error_command_invalid": "Invalid command.",
   "task_error_poll_id_invalid": "Invalid Poll ID.",

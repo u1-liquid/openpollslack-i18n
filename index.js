@@ -14,6 +14,8 @@ const {globSync} = require("glob");
 
 const cron = require('node-cron');
 const cronParser = require('cron-parser');
+const cronstrue = require('cronstrue');
+const cronstrueOp = { use24HourTimeFormat: true };
 
 const { createLogger, format, transports } = require('winston');
 const fs = require('fs');
@@ -1481,7 +1483,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           type: 'mrkdwn',
           text: "```\n/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
               "\n/"+slackCommand+" schedule delete [POLL_ID]" +
-              "\n/"+slackCommand+" schedule list_self" +
+              "\n/"+slackCommand+" schedule list" +
               "\n/"+slackCommand+" schedule delete_done" +
               "```",
         },
@@ -2002,7 +2004,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           return;
 
 
-        } else if (cmdMode === "list_self") {
+        } else if (cmdMode === "list_self" || cmdMode === "list" ) {
           const queryRes = await scheduleCol.aggregate([
             {
               $match: { created_user_id: body.user_id } // Filter by is_enable before the lookup
@@ -2027,10 +2029,16 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let resString = "";
           let foundCount = 0;
           for (const item of queryRes) {
+            let cronHumanText = "";
+            if(item?.cron_string && item?.cron_string !== "") {
+              try {
+                cronHumanText = cronstrue.toString(item?.cron_string, cronstrueOp)+", ";
+              } catch (e) { }
+            }
             resString+="```";
             resString+=`Poll ID: ${item.poll_id}\n`;
             resString+=`Next Run: `+localizeTimeStamp(myTz,item.next_ts)+`\n`;
-            resString+=`Cron Expression: ${item.cron_string} (UTC Time Zone)\n`;
+            resString+=`Cron Expression: ${item.cron_string} (${cronHumanText}UTC Time Zone)\n`;
             resString+=`Enable: ${item.is_enable}\n`;
             resString+=`Override CH: ${item.poll_ch}\n`;
             //resString+=`Question : ${item.pollData?.question}\n`;
@@ -2088,11 +2096,17 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
           let resString = "";
           let foundCount = 0;
           for (const item of queryRes) {
+            let cronHumanText = "";
+            if(item?.cron_string && item?.cron_string !== "") {
+              try {
+                cronHumanText = cronstrue.toString(item?.cron_string, cronstrueOp)+", ";
+              } catch (e) { }
+            }
             resString+="```";
             resString+=`Poll ID: ${item.poll_id}\n`;
             resString+=`Owner: ${item.created_user_id}\n`;
             resString+=`Next Run: `+localizeTimeStamp(myTz,item.next_ts)+`\n`;
-            resString+=`Cron Expression: ${item.cron_string} (UTC Time Zone)\n`;
+            resString+=`Cron Expression: ${item.cron_string} (${cronHumanText}UTC Time Zone)\n`;
             resString+=`Enable: ${item.is_enable}\n`;
             resString+=`Override CH: ${item.poll_ch}\n`;
             //resString+=`Question : ${item.pollData?.question}\n`;
