@@ -3819,9 +3819,9 @@ app.action('modal_select_when', async ({ action, ack, body, client, context }) =
     else
     {
       //ignote it!
-      logger.debug(`Error on client.conversations.info (CH:${privateMetadata?.channel}) :`+e.message);
-      console.log(e);
-      console.trace();
+      // logger.debug(`Error on client.conversations.info (CH:${privateMetadata?.channel}) :`+e.message);
+      // console.log(e);
+      // console.trace();
       isChErr = true;
     }
 
@@ -3975,9 +3975,9 @@ app.action('modal_poll_channel', async ({ action, ack, body, client, context }) 
     else
     {
       //ignote it!
-      logger.debug(`Error on client.conversations.info (CH:${privateMetadata?.channel}) :`+e.message);
-      console.log(e);
-      console.trace();
+      // logger.debug(`Error on client.conversations.info (CH:${privateMetadata?.channel}) :`+e.message);
+      // console.log(e);
+      // console.trace();
       isChErr = true;
     }
 
