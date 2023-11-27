@@ -417,6 +417,11 @@ const checkAndExecuteTasks = async () => {
           let localizeTS = await getAndlocalizeTimeStamp(mBotToken,mTaskOwner,task.next_ts);
           if(postRes.status === false) {
             dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti_error'), {error:postRes.message,poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+            await scheduleCol.updateOne(
+                { _id: task._id },
+                { $set: { last_error_ts: new Date(), last_error_text: postRes?.message} }
+            );
+            continue;
           } else {
             if(taskRunCounter>=taskRunMax) {
               //last one
@@ -804,6 +809,7 @@ const sendMessageUsingUrl = async (url,newMessage) => {
 
 const postChat = async (url,type,requestBody) => {
   let ret = {status:false,message : "N/A",slack_response:null};
+  const addChNotFoundErr = "(Bot might not in this channel)";
   try {
     if(isUseResponseUrl && url!==undefined && url!=="")
     {
@@ -835,7 +841,7 @@ const postChat = async (url,type,requestBody) => {
       ret.slack_response = await sendMessageUsingUrl(url,requestBody);
       if(ret.slack_response?.status!==200) {
         ret.status = false;
-        ret.message = ret.slack_response?.statusText;
+        ret.message = ret.slack_response?.statusText+` ${addChNotFoundErr}`;
         return ret;
       }
     }
@@ -869,27 +875,27 @@ const postChat = async (url,type,requestBody) => {
         && 'channel_not_found' === e.data.error
     ) {
       logger.error('Channel not found error : ignored');
-      ret.message = "Channel not found error : ignored";
+      ret.message = "Channel not found error : ignored"+` ${addChNotFoundErr}`;
     }
     else if (
         e && e.data && e.data && e.data.error
         && 'team_not_found' === e.data.error
     ) {
       logger.error('Team not found error : ignored');
-      ret.message = "Team not found error : ignored";
+      ret.message = "Team not found error : ignored"+` ${addChNotFoundErr}`;
     }
     else if (
         e && e.data && e.data && e.data.error
         && 'team_access_not_granted' === e.data.error
     ) {
       logger.error('Team not found/not granted error : ignored');
-      ret.message = "Team not found/not grante error : ignored";
+      ret.message = "Team not found/not grante error : ignored"+` ${addChNotFoundErr}`;
     } else {
       logger.error(e);
       console.log(e);
       console.log(requestBody);
       console.trace();
-      ret.message = "Unknown error";
+      ret.message = "Unknown error: "+e?.data?.error;
     }
     ret.status = false;
     return ret;
