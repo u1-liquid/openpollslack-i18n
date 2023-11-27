@@ -14,7 +14,8 @@ Open Poll+は、Slackで投票を作成するための無料かつオープン�
 Open Poll+는 Slack에서 설문 조사를 작성하기 위한 무료 및 오픈 소스 앱입니다.\
 Open Poll+ - бесплатное приложение с открытым исходным кодом для создания опросов в Slack.\
 Open Poll+ هو تطبيق مجاني ومفتوح المصدر لإنشاء استطلاعات في Slack.\
-Open Poll+是用于在Slack中创建调查的免费开源应用程序。
+Open Poll+是用于在Slack中创建调查的免费开源应用程序。 \
+![poll-modal-en-v4.png](./assets/poll-modal-en-v4.png)
 
 # About this fork 
 
@@ -46,83 +47,16 @@ After adding the app to Slack, please use the `/poll config` command to configur
 
 If you didn't use any of these Feature you might want to use original App here [GitLab](https://gitlab.com/openpollslack/openpollslack).
 
-## Team config (Override Server config)
+## Usages
 
-If some of your team would like to using different config than what is on default.json you can use `/poll config` .
-- This command only work on user who install app to Slack only
-- If app was re-add to workspace all Override config will be carry over for you
-
-Usage:
+### Simple and scheduled poll via user interface
+Just type `/poll` (without any options) in the channel that you want to post!
 ```
-/poll config read
-/poll config write app_lang [zh_tw/zh_cn/th/ru/kr/jp/fr/es/en/de/(or language file)]
-/poll config write app_lang_user_selectable [true/false]
-/poll config write app_allow_dm [true/false]
-/poll config write menu_at_the_end [true/false]
-/poll config write create_via_cmd_only [true/false]
-/poll config write compact_ui [true/false]
-/poll config write show_divider [true/false]
-/poll config write show_help_link [true/false]
-/poll config write show_command_info [true/false]
-/poll config write true_anonymous [true/false]
-/poll config write add_number_emoji_to_choice [true/false]
-/poll config write add_number_emoji_to_choice_btn [true/false]
-/poll config write delete_data_on_poll_delete [true/false]
+/poll
 ```
+![poll-modal-en-v4.png](./assets/poll-modal-en-v4.png)
 
-## Self-host: Server config (config/default.json)
-- `mongo_url`: the url to connect to your mongo database
-- `mongo_db_name`: your mongo database name (Main DB)
-- `app_lang` for translation (Please put language file in language folder), Translate some text to Thai (th-ภาษาไทย)
-- `app_lang_user_selectable` if set to `true`; Let user who create poll (Via Modal) select language of poll UI 
-- `app_allow_dm` Allow app to send direct message to user (When error or schedule occure) 
-- `app_datetime_format` Datetime format to display to user
-- `use_response_url` if set to `true`; app will respond to request using `response_url` instead of using `app.client.chat.post`
-  so user will be able to create poll in private channel without adding bot to that channel (using /command or Modal that called by /command, but not via shortcut), But it might get timeout if user not response after Modal was created (click create poll) within slack time limit(30 minutes).
-- `create_via_cmd_only`  if set to `true` (available only if `use_response_url` is enabled) ; User will NOT able to create Poll using Shortcut; it will show `modal_ch_via_cmd_only` string to ask user to create poll via /command instead.
-- `menu_at_the_end` if set to `true`; Rearrange Menu to the end of poll so no more big menu button between question and answer when using smartphone
-- `add_number_emoji_to_choice` and `add_number_emoji_to_choice_btn`  if set to `true`; Number emoji (customizeable) will show in the vote option text / button
-- `compact_ui` if set to `true`; Choice text will compact to voter name
-- `show_divider` if set to `false`; Poll will be more compact (divider between choice will be removed)
-- `show_help_link` if set to `false`; help link will be removed from poll
-- `show_command_info` if set to `false`; command that use to create poll will be removed (You still can see command in Menu)
-- `true_anonymous` if set to `true`; Poller will no longer see who voted which options if poll is anonymous, If this mode is disabled; `info_anonymous_notice` will show to let users know that poller can still see there votes
-- `delete_data_on_poll_delete` if set to `true`; When poller request to delete the poll, all data in database that refer to that poll will be deleted(schedule poll that refer to deleted poll also stop working). If you want to disable it please make sure if compliance with your policy.
-- `log_level_app` valid options are: `debug` `verbose` `info` `warn` `error`
-- `log_level_bolt` valid options are: `debug` `verbose` `info` `warn` `error`
-- `log_to_file` valid options are: `true` `false`
-- `log_dir` folder of log file
-- `schedule_limit_hrs` schedule will deny to re-run if schedule jobs is shorter than this number (hours)
-- `schedule_max_run` Maximum/Default run count for single schedule that can be set.
-- `schedule_auto_delete_invalid_day` Schedules that already finished, done, no longer valid, disabled will be automatically delete after this value(days)
-
-## Example
-
-- if `response_url` is not enable or not in use, user will get feedback if poll can create in that channel or not (required `channels:read`,`groups:read`,`mpim:read` Permissions)
-
-  ![Alt text](./assets/poll-ch-check-feedback.png?raw=true "poll-ch-check-feedback")
-- User language selectable
-
-  ![Alt text](./assets/poll-lang-select.png?raw=true "poll-lang-select")
-- User add choice
-
-  ![Alt text](./assets/poll-add-choice-en.png?raw=true "User add choice")
-- UI Config
-
-  ![Alt text](./assets/UI-compare.png?raw=true "UI-compare")
-  ![Alt text](./assets/UI-compare-mobile.png?raw=true "UI-compare-mobile")
-  ![Alt text](./assets/UI-menu-location.png?raw=true "UI-menu-location")
-- Emoji On/Off
-
- ![Alt text](./assets/UI-emoji.png?raw=true "UI-Emoji")
-
-- If `true_anonymous` is set to `false`, You also can add notice to user when anonymous is created (since creator still can see their votes) by add text you want in `info_anonymous_notice` of language file 
-
- ![Alt text](./assets/poll-anonymous-note.png?raw=true "poll-anonymous-note")
-
-## Command usages
-
-### Simple poll
+### Simple poll via command
 ```
 /poll "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
@@ -254,6 +188,83 @@ Delete all schedules that already finished, done, no longer valid, disabled
 ```
 /poll schedule delete_done
 ```
+
+It is not required to run `/poll schedule delete_done` as server will clear out unused schedules for you.
+if you host this by your self you can make change this in `schedule_auto_delete_invalid_day`
+
+## Team config (Override Server config)
+
+If some of your team would like to using different config than what is on default.json you can use `/poll config` .
+- This command only work on user who install app to Slack only
+- If app was re-add to workspace all Override config will be carry over for you
+
+Usage:
+```
+/poll config read
+/poll config write app_lang [zh_tw/zh_cn/th/ru/kr/jp/fr/es/en/de/(or language file)]
+/poll config write app_lang_user_selectable [true/false]
+/poll config write app_allow_dm [true/false]
+/poll config write menu_at_the_end [true/false]
+/poll config write create_via_cmd_only [true/false]
+/poll config write compact_ui [true/false]
+/poll config write show_divider [true/false]
+/poll config write show_help_link [true/false]
+/poll config write show_command_info [true/false]
+/poll config write true_anonymous [true/false]
+/poll config write add_number_emoji_to_choice [true/false]
+/poll config write add_number_emoji_to_choice_btn [true/false]
+/poll config write delete_data_on_poll_delete [true/false]
+```
+
+## Self-host: Server config (config/default.json)
+- `mongo_url`: the url to connect to your mongo database
+- `mongo_db_name`: your mongo database name (Main DB)
+- `app_lang` for translation (Please put language file in language folder), Translate some text to Thai (th-ภาษาไทย)
+- `app_lang_user_selectable` if set to `true`; Let user who create poll (Via Modal) select language of poll UI 
+- `app_allow_dm` Allow app to send direct message to user (When error or schedule occure) 
+- `app_datetime_format` Datetime format to display to user
+- `use_response_url` if set to `true`; app will respond to request using `response_url` instead of using `app.client.chat.post`
+  so user will be able to create poll in private channel without adding bot to that channel (using /command or Modal that called by /command, but not via shortcut), But it might get timeout if user not response after Modal was created (click create poll) within slack time limit(30 minutes).
+- `create_via_cmd_only`  if set to `true` (available only if `use_response_url` is enabled) ; User will NOT able to create Poll using Shortcut; it will show `modal_ch_via_cmd_only` string to ask user to create poll via /command instead.
+- `menu_at_the_end` if set to `true`; Rearrange Menu to the end of poll so no more big menu button between question and answer when using smartphone
+- `add_number_emoji_to_choice` and `add_number_emoji_to_choice_btn`  if set to `true`; Number emoji (customizeable) will show in the vote option text / button
+- `compact_ui` if set to `true`; Choice text will compact to voter name
+- `show_divider` if set to `false`; Poll will be more compact (divider between choice will be removed)
+- `show_help_link` if set to `false`; help link will be removed from poll
+- `show_command_info` if set to `false`; command that use to create poll will be removed (You still can see command in Menu)
+- `true_anonymous` if set to `true`; Poller will no longer see who voted which options if poll is anonymous, If this mode is disabled; `info_anonymous_notice` will show to let users know that poller can still see there votes
+- `delete_data_on_poll_delete` if set to `true`; When poller request to delete the poll, all data in database that refer to that poll will be deleted(schedule poll that refer to deleted poll also stop working). If you want to disable it please make sure if compliance with your policy.
+- `log_level_app` valid options are: `debug` `verbose` `info` `warn` `error`
+- `log_level_bolt` valid options are: `debug` `verbose` `info` `warn` `error`
+- `log_to_file` valid options are: `true` `false`
+- `log_dir` folder of log file
+- `schedule_limit_hrs` schedule will deny to re-run if schedule jobs is shorter than this number (hours)
+- `schedule_max_run` Maximum/Default run count for single schedule that can be set.
+- `schedule_auto_delete_invalid_day` Schedules that already finished, done, no longer valid, disabled will be automatically delete after this value(days)
+
+## Example
+
+- if `response_url` is not enable or not in use, user will get feedback if poll can create in that channel or not (required `channels:read`,`groups:read`,`mpim:read` Permissions)
+
+  ![Alt text](./assets/poll-ch-check-feedback.png?raw=true "poll-ch-check-feedback")
+- User language selectable
+
+  ![Alt text](./assets/poll-lang-select.png?raw=true "poll-lang-select")
+- User add choice
+
+  ![Alt text](./assets/poll-add-choice-en.png?raw=true "User add choice")
+- UI Config
+
+  ![Alt text](./assets/UI-compare.png?raw=true "UI-compare")
+  ![Alt text](./assets/UI-compare-mobile.png?raw=true "UI-compare-mobile")
+  ![Alt text](./assets/UI-menu-location.png?raw=true "UI-menu-location")
+- Emoji On/Off
+
+ ![Alt text](./assets/UI-emoji.png?raw=true "UI-Emoji")
+
+- If `true_anonymous` is set to `false`, You also can add notice to user when anonymous is created (since creator still can see their votes) by add text you want in `info_anonymous_notice` of language file 
+
+ ![Alt text](./assets/poll-anonymous-note.png?raw=true "poll-anonymous-note")
 
 ## Self hosted installation
 
