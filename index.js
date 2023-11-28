@@ -23,6 +23,8 @@ const path = require('path');
 //const moment = require('moment');
 const moment = require('moment-timezone');
 
+const { v4: uuidv4 } = require('uuid');
+
 let langDict = {};
 
 let langList = {};
@@ -59,7 +61,7 @@ const gScheduleAutoDeleteDay = config.get('schedule_auto_delete_invalid_day');
 
 const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete","app_allow_dm"];
 
-const client = new MongoClient(config.get('mongo_url'));
+const mClient = new MongoClient(config.get('mongo_url'));
 let orgCol = null;
 let votesCol = null;
 let closedCol = null;
@@ -209,9 +211,9 @@ logger.info('Server starting...');
 
 try {
   logger.info('Connecting to database server...');
-  client.connect();
+  mClient.connect();
   logger.info('Connected successfully to server')
-  const db = client.db(config.get('mongo_db_name'));
+  const db = mClient.db(config.get('mongo_db_name'));
   orgCol = db.collection('token');
   votesCol = db.collection('votes');
   closedCol = db.collection('closed');
@@ -221,7 +223,7 @@ try {
 
   migrations = new Migrations(db);
 } catch (e) {
-  client.close();
+  mClient.close();
   logger.error(e)
   console.log(e);
   process.exit();
@@ -421,7 +423,7 @@ const checkAndExecuteTasks = async () => {
                 { _id: task._id },
                 { $set: { last_error_ts: new Date(), last_error_text: postRes?.message} }
             );
-            continue;
+            //continue;
           } else {
             if(taskRunCounter>=taskRunMax) {
               //last one
@@ -2554,6 +2556,26 @@ const createModalBlockInput = (userLang)  => {
   }
 };
 
+const createModalBlockInputDelete = (userLang)  => {
+  return {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": " "
+      },
+      "accessory": {
+        "type": "button",
+        "text": {
+          "type": "plain_text",
+          "text": "🗑",
+          "emoji": true
+        },
+        "value": "del-0",
+        "action_id": "btn_del_choice"
+      }
+    }
+};
+
 (async () => {
   logger.info('Start database migration.');
   await migrations.init();
@@ -2606,9 +2628,17 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
   let endBlocks = blocks.slice(-1);
 
   let tempModalBlockInput = JSON.parse(JSON.stringify(createModalBlockInput(appLang)));
-  tempModalBlockInput.block_id = 'choice_'+(blocks.length-8);
+  //tempModalBlockInput.block_id = 'choice_'+(blocks.length-8);
+  tempModalBlockInput.block_id = 'choice_'+uuidv4();
+
+  let tempModalBlockInputDelete = JSON.parse(JSON.stringify(createModalBlockInputDelete(appLang)));
+  tempModalBlockInputDelete.block_id = tempModalBlockInput.block_id+"_del";
+  tempModalBlockInputDelete.accessory.value = tempModalBlockInput.block_id;
+  //tempModalBlockInputDelete.text.text = tempModalBlockInput.block_id;
+
 
   beginBlocks.push(tempModalBlockInput);
+  beginBlocks.push(tempModalBlockInputDelete);
   blocks = beginBlocks.concat(endBlocks);
 
   const view = {
@@ -2635,6 +2665,66 @@ app.action('btn_add_choice', async ({ action, ack, body, client, context }) => {
   catch (e) {
     //do not ack so user can see some error
     logger.debug("Error on btn_add_choice (maybe user click too fast");
+  }
+
+});
+app.action('btn_del_choice', async ({ action, ack, body, client, context }) => {
+
+  if (
+    !body
+    || !body.view
+    || !body.view.blocks
+    || !body.view.hash
+    || !body.view.type
+    || !body.view.title
+    || !body.view.submit
+    || !body.view.close
+    || !body.view.id
+    || !body.view.private_metadata
+  ) {
+    logger.info('error');
+    return;
+  }
+  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(context));
+  let appLang= gAppLang;
+  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang
+  let blocks = body.view.blocks;
+  const hash = body.view.hash;
+
+  logger.debug("DEL:"+action.value);
+
+  // Filter out the block that has a block_id starting with action.value
+  blocks = blocks.filter(block => {
+    if (!block.block_id || !block.block_id.startsWith(action.value)) {
+      return true;
+    }
+    return false;
+  });
+
+  const view = {
+    type: body.view.type,
+    private_metadata: body.view.private_metadata,
+    callback_id: 'modal_poll_submit',
+    title: body.view.title,
+    submit: body.view.submit,
+    close: body.view.close,
+    blocks: blocks,
+    external_id: body.view.id,
+  };
+
+  try {
+    const result = await client.views.update({
+      token: context.botToken,
+      hash: hash,
+      view: view,
+      view_id: body.view.id,
+    });
+
+    await ack();
+  }
+  catch (e) {
+    //do not ack so user can see some error
+    logger.debug("Error on btn_del_choice (maybe user click too fast");
   }
 
 });
@@ -3370,6 +3460,8 @@ async function createModal(context, client, trigger_id,response_url,channel) {
     if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
     let tempModalBlockInput = JSON.parse(JSON.stringify(createModalBlockInput(appLang)));
     tempModalBlockInput.block_id = 'choice_0';
+    // let tempModalBlockInputDelete = JSON.parse(JSON.stringify(createModalBlockInputDelete(appLang)));
+    // tempModalBlockInputDelete.accessory.value = 'choice_0';
     let isMenuAtTheEnd = gIsMenuAtTheEnd;
     if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
     let isShowHelpLink = gIsShowHelpLink;
@@ -4084,11 +4176,8 @@ app.action('modal_poll_options', async ({ action, ack, body, client, context }) 
   }
 });
 
-app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
-  if(!isUseResponseUrl) await ack();
-  else await ack();
-  // logger.silly(body);
-  // logger.silly(context);
+app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
+
   if (
     !view
     || !body
@@ -4159,10 +4248,48 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   const isAllowUserAddChoice = privateMetadata.user_add_choice;
   const response_url = privateMetadata.response_url;
 
+
+  if(!isUseResponseUrl || !response_url || response_url === "" || postDateTime!==null) {
+    try {
+      const result = await client.conversations.info({
+        token: context.botToken,
+        channel: channel
+      });
+    }
+    catch (e) {
+      if(e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted'))
+      {
+        await ack({
+          response_action: 'errors',
+          errors: {
+            task_when: parameterizedString(stri18n(appLang,'err_bot_not_in_ch'),{bot_name:botName}),
+          },
+        });
+        return;
+      }
+      else
+      {
+        //ignore it!
+        logger.debug(`Error on client.conversations.info (CH:${channel}) :`+e.message);
+        console.log(e);
+        console.trace();
+      }
+    }
+    await ack();
+  }
+  // logger.silly(body);
+  // logger.silly(context);
+
   if (
     !question
     || 0 === options.length
   ) {
+    await ack({
+      response_action: 'errors',
+      errors: {
+        question: stri18n(appLang,'err_please_check_input'),
+      },
+    });
     return;
   }
 
@@ -4173,6 +4300,14 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
   catch (e)
   {
     logger.error(e);
+
+    await ack({
+      response_action: 'errors',
+      errors: {
+        question: stri18n(appLang,'err_process_command'),
+      },
+    });
+
     let mRequestBody = {
       token: context.botToken,
       channel: channel,
@@ -4225,6 +4360,14 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
       //not able to dm user
       console.log(e);
     }
+
+    await ack({
+      response_action: 'errors',
+      errors: {
+        question: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
+      },
+    });
+
     return;
   }
 
@@ -4255,6 +4398,14 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
         console.trace();
         console.log(e);
       }
+
+      await ack({
+        response_action: 'errors',
+        errors: {
+          question: `Error while create poll:${postRes.message}`,
+        },
+      });
+      return;
     }
   } else {
     //schedule
@@ -4312,12 +4463,17 @@ app.view('modal_poll_submit', async ({ ack, body, view, context }) => {
         text: "[Schedule] Scheduled Error"
       };
       await postChat(response_url, 'ephemeral', mRequestBody);
+
+      await ack({
+        response_action: 'errors',
+        errors: {
+          task_when: `[Schedule] Scheduled Error`,
+        },
+      });
+
     }
-
-
   }
-
-
+  await ack();
 });
 
 app.view('modal_delete_confirm', async ({ ack, body, view, context }) => {
