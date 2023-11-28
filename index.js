@@ -3177,6 +3177,20 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
         text: message.text,
       };
       await postChat(body.response_url,'update',mRequestBody);
+
+      if(isAnonymous) {
+        let mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_vote'), {choice: ""});
+        if(removeVote) mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_unvote'), {choice: ""});
+        let mRequestBody = {
+          token: context.botToken,
+          channel: body.channel.id,
+          user: body.user.id,
+          attachments: [],
+          text: mesStr
+        };
+        await postChat(body.response_url,'ephemeral',mRequestBody);
+      }
+
     } catch (e) {
       logger.error(e);
       let mRequestBody = {
@@ -3190,18 +3204,6 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
 
     } finally {
       release();
-      if(isAnonymous) {
-        let mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_vote'), {choice: ""});
-        if(removeVote) mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_unvote'), {choice: ""});
-        let mRequestBody = {
-          token: context.botToken,
-          channel: body.channel.id,
-          user: body.user.id,
-          attachments: [],
-          text: mesStr
-        };
-        await postChat(body.response_url,'ephemeral',mRequestBody);
-      }
     }
   } else {
     let mRequestBody = {
