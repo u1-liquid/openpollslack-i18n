@@ -4212,6 +4212,8 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
   const options = [];
   let limit = 1;
 
+  let isAck = false;
+
   if (state.values) {
     for (const optionName in state.values) {
       const option = state.values[optionName][Object.keys(state.values[optionName])[0]];
@@ -4358,6 +4360,14 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
   else cmd_via = "modal_manual";
 
   if(options.length > gSlackLimitChoices) {
+
+    await ack({
+      response_action: 'errors',
+      errors: {
+        question: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
+      },
+    });
+
     try {
       let mRequestBody = {
         token: context.botToken,
@@ -4369,13 +4379,6 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       //not able to dm user
       console.log(e);
     }
-
-    await ack({
-      response_action: 'errors',
-      errors: {
-        question: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
-      },
-    });
 
     return;
   }
@@ -4393,6 +4396,13 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     const postRes = await postChat(response_url,'post',mRequestBody);
     //console.log(postRes);
     if(postRes.status === false) {
+      await ack({
+        response_action: 'errors',
+        errors: {
+          question: `Error while create poll:${postRes.message}`,
+        },
+      });
+
       try {
         let mRequestBody = {
           token: context.botToken,
@@ -4408,12 +4418,6 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         console.log(e);
       }
 
-      await ack({
-        response_action: 'errors',
-        errors: {
-          question: `Error while create poll:${postRes.message}`,
-        },
-      });
       return;
     }
   } else {
@@ -4452,6 +4456,10 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         cron_string: null,
         run_max: 1
       });
+
+      if(!isAck) await ack();
+      isAck=true;
+
       let mRequestBody = {
         token: context.botToken,
         channel: channel,
@@ -4463,6 +4471,14 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       logger.verbose(`[Schedule] New task create from UI (PollID:${pollID})`);
     }
     catch (e) {
+
+      await ack({
+        response_action: 'errors',
+        errors: {
+          task_when: `[Schedule] Scheduled Error`,
+        },
+      });
+
       logger.error(`[Schedule] New task create from UI (PollID:${pollID}) ERROR`);
       logger.error(e);
       let mRequestBody = {
@@ -4472,17 +4488,10 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         text: "[Schedule] Scheduled Error"
       };
       await postChat(response_url, 'ephemeral', mRequestBody);
-
-      await ack({
-        response_action: 'errors',
-        errors: {
-          task_when: `[Schedule] Scheduled Error`,
-        },
-      });
-
+      return;
     }
   }
-  await ack();
+  if(!isAck) await ack();
 });
 
 app.view('modal_delete_confirm', async ({ ack, body, view, context }) => {
