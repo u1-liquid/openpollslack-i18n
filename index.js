@@ -4284,7 +4284,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         console.trace();
       }
     }
-    await ack();
+    //await ack();
   }
   // logger.silly(body);
   // logger.silly(context);
