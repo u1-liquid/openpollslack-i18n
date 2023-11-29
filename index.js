@@ -4328,8 +4328,20 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         } else if ('task_when_ts' === optionName) {
           postDateTime = option.selected_date_time;
           //console.log(option);
+        } else if ('channel' === optionName) {
+          privateMetadata.channel = option.selected_conversation;
         }
       }
+    }
+
+    if(privateMetadata.channel===undefined || privateMetadata.channel==null) {
+      await ack({
+        response_action: 'errors',
+        errors: {
+          task_when: parameterizedString(stri18n(appLang, 'err_para_missing'), {parameter: "Channel to post"}),
+        },
+      });
+      return;
     }
 
     if (isNaN(limit)) limit = 1;

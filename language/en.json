@@ -117,7 +117,7 @@
   "err_poll_hide_exception": "An error occurred during hide processing. Please try again in few seconds.",
   "err_poll_reveal_exception": "An error occurred during reveal processing. Please try again in few seconds.",
   "err_poll_unconsistent_exception": "Unconsistent poll data",
-  "err_poll_ch_exception": ":warning::warning:\nCan not chect if you are able to create poll in this channel or not.\nYou may try to re-select again in few seconds.",
+  "err_poll_ch_exception": ":warning::warning:\nCan not check if you are able to create poll in this channel or not.\nYou may try to re-select again in few seconds.",
   "err_duplicate_add_choice": "[{{text}}] already exists in choice",
   "err_process_command": "Error while processing command please check and try again...",
   "err_invalid_command": "Invalid command or parts of command (except question and choice) may contains *bold* ~strike~ _italics_ or `code`",
