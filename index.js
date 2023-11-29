@@ -4339,15 +4339,17 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
           //console.log(option);
         } else if ('channel' === optionName) {
           privateMetadata.channel = option.selected_conversation;
+        } else if ('task_when' === optionName) {
+          privateMetadata.when = option.selected_option?.value;
         }
       }
     }
 
-    if(privateMetadata.channel===undefined || privateMetadata.channel==null) {
+    if(privateMetadata.when==="later" && postDateTime==null) {
       let ackErr = {
         response_action: 'errors',
         errors: {
-          task_when: parameterizedString(stri18n(appLang, 'err_para_missing'), {parameter: "Channel to post"}),
+          task_when: parameterizedString(stri18n(appLang, 'err_para_missing'), {parameter: "time"}),
         },
       };
       await ack(ackErr);
@@ -4363,6 +4365,16 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     const isAllowUserAddChoice = privateMetadata.user_add_choice;
     const response_url = privateMetadata.response_url;
 
+    if( (!isUseResponseUrl || !response_url || response_url === "" ) && (privateMetadata.channel===undefined || privateMetadata.channel==null) ) {
+      let ackErr = {
+        response_action: 'errors',
+        errors: {
+          task_when: parameterizedString(stri18n(appLang, 'err_para_missing'), {parameter: "Channel to post"}),
+        },
+      };
+      await ack(ackErr);
+      return;
+    }
 
     if (!isUseResponseUrl || !response_url || response_url === "" || postDateTime !== null) {
       try {
