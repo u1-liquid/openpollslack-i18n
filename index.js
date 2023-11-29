@@ -225,6 +225,7 @@ try {
 } catch (e) {
   mClient.close();
   logger.error(e)
+  logger.error(e.toString()+"\n"+e.stack);
   console.log(e);
   process.exit();
 }
@@ -282,8 +283,9 @@ function calculateNextScheduleTime(cronString,timeZoneString) {
     };
     const interval = cronParser.parseExpression(cronString,options);
     return interval.next().toDate();
-  } catch (error) {
-    console.log(error);
+  } catch (e) {
+    console.log(e);
+    logger.debug(e.toString()+"\n"+e.stack);
     return null;
   }
 }
@@ -440,6 +442,7 @@ const checkAndExecuteTasks = async () => {
           dmOwnerString = errMsg;
           logger.verbose(errMsg);
           logger.verbose(e);
+          logger.error(e.toString()+"\n"+e.stack);
           console.log(e);
         }
       }
@@ -896,6 +899,7 @@ const postChat = async (url,type,requestBody) => {
       logger.error(e);
       console.log(e);
       console.log(requestBody);
+      logger.error(e.toString()+"\n"+e.stack);
       console.trace();
       ret.message = "Unknown error: "+e?.data?.error;
     }
@@ -1254,729 +1258,805 @@ app.event('app_home_opened', async ({ event, client, context }) => {
         ],
       },
     });
-  } catch (error) {
-    logger.error(error);
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in app_home_opened :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
   }
 });
 
 app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, say, respond }) => {
 
-  const receivedTime = new Date().getTime();
-  await ack();
-  let cmdBody = (command && command.text) ? command.text.trim() : null;
-
-  if(cmdBody?.startsWith('ping')) {
-    const ackedTime = new Date().getTime();
-    const timeDiff = ackedTime - receivedTime;
-    // Respond with the time difference
-    await respond(`Time from receiving to acknowledging: ${timeDiff} ms`);
-    return;
-  }
-  // Create a pattern for matching escaped quotes
-  const escapedQuotesPattern = acceptedQuotes.map(q => `\\\\${q}`).join('|');
-
-  // Replace non-standard quotes with the standard quote, but ignore already escaped quotes
-  const acceptedQuotesPattern = acceptedQuotes.filter(q => q !== standardQuote).map(q => `\\${q}`).join('');
-  if(!cmdBody) {
-
-  } else {
-    cmdBody = cmdBody.replace(new RegExp(`(^|[^\\\\])([${acceptedQuotesPattern}])`, 'g'), `$1${standardQuote}`);
-  }
-  const fullCmd = `/${slackCommand} ${cmdBody}`
-
-  const isHelp = cmdBody ? 'help' === cmdBody : false;
-
-  const channel = (command && command.channel_id) ? command.channel_id : null;
-
-  const userId = (command && command.user_id) ? command.user_id : null;
-
-  const teamOrEntId = getTeamOrEnterpriseId(context);
-  const teamConfig = await getTeamOverride(teamOrEntId);
-  let appLang= gAppLang;
-  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-
-  let isMenuAtTheEnd = gIsMenuAtTheEnd;
-  let isCompactUI = gIsCompactUI;
-  let isShowDivider = gIsShowDivider;
-  let isShowHelpLink = gIsShowHelpLink;
-  let isShowCommandInfo = gIsShowCommandInfo;
-  let isTrueAnonymous = gTrueAnonymous;
-  let isShowNumberInChoice = gIsShowNumberInChoice;
-  let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
-
-  if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
-  if(teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
-  if(teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
-  if(teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
-  if(teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
-  if(teamConfig.hasOwnProperty("true_anonymous")) isTrueAnonymous = teamConfig.true_anonymous;
-  if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
-  if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
-
-  let myTz = null;
   try {
-    const userInfo = await app.client.users.info({
-      token: context.botToken,
-      user: userId
-    });
-    myTz = userInfo?.user?.tz;
-  } catch (e) { }
+    const receivedTime = new Date().getTime();
+    await ack();
+    let cmdBody = (command && command.text) ? command.text.trim() : null;
 
-  if (isHelp) {
-    const blocks = [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Open source poll for Slack*',
-        },
-      },
-      {
-        type: 'divider',
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Create a poll using modal*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+"```",
-        },
-      },
-      {
-        type: 'divider',
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Create a poll using command*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with `\\"` and escaped `\\ ` with `\\\\`  ',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '(Supported double quote: '+getSupportDoubleQuoteToStr()+')',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Simple poll*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\".\n```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" \"Please select \\\"HELLO\\\" ?\" \"HELLO\" \"HELlo\" \"helLo\" \"HE\\\"LL\\\"O\"\n```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Anonymous poll*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" anonymous \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Hidden poll votes*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" hidden \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Limited choice poll*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Anonymous limited choice poll*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" anonymous limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Allow choices add by others*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" add-choice \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Change poll language for current poll only*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" lang th \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-        },
-      },
+    if (cmdBody?.startsWith('ping')) {
+      const ackedTime = new Date().getTime();
+      const timeDiff = ackedTime - receivedTime;
+      // Respond with the time difference
+      await respond(`Time from receiving to acknowledging: ${timeDiff} ms`);
+      return;
+    }
+    // Create a pattern for matching escaped quotes
+    const escapedQuotesPattern = acceptedQuotes.map(q => `\\\\${q}`).join('|');
 
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Advanced Schedule/Recurring Poll*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
-              "\n/"+slackCommand+" schedule delete [POLL_ID]" +
-              "\n/"+slackCommand+" schedule list" +
-              "\n/"+slackCommand+" schedule delete_done" +
-              "```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "\n- Bot MUST in the channel" +
-              "\n- Only one schedule for each poll, reschedule will replace previous one" +
-              "\n- `POLL_ID` = ID of poll to schedule " +
-              "\n   - You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
-              "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)" +
-              "\n- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
-              "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
-              "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format|[cron expression]>\" in UTC Timezone (with \"Double Quote\")" +
-              "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possible. (`"+gScheduleMaxRun+"` Times)" +
-              "\n\n*NOTE*: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n For more information please visit <"+helpLink+"|full document here>." +
-              "",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "Supported cron expression format: ```" +
-              "\n*    *    *    *    *" +
-              "\n┬    ┬    ┬    ┬    ┬" +
-              "\n│    │    │    │    |" +
-              "\n│    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)" +
-              "\n│    │    │    └───── month (1 - 12)" +
-              "\n│    │    └────────── day of month (1 - 31, L)" +
-              "\n│    └─────────────── hour (0 - 23)" +
-              "\n└──────────────────── minute (0 - 59)" +
-              "```",
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "Example:\n"+
-              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
-              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"30 12 15 * *\" 12```\n" +
-              "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"30 12 15 * *\" 12```"
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: '*Config Open Poll for this Workspace*',
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: "```\n/"+slackCommand+" config```",
-        },
-      },
-      {
-        type: 'divider',
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: parameterizedString(stri18n(appLang, 'info_need_help'), {email: helpEmail,link:helpLink}),
-          //text: stri18n(appLang,'info_need_help')
-        },
-      },
-      // {
-      //   type: 'section',
-      //   text: {
-      //     type: 'mrkdwn',
-      //     text: `${helpEmail}`,
-      //   },
-      // },
-      // {
-      //   type: 'section',
-      //   text: {
-      //     type: 'mrkdwn',
-      //     text: `<${helpLink}|${helpLink}>`,
-      //   },
-      // },
-    ];
-    let mRequestBody = {
-      token: context.botToken,
-      channel: channel,
-      user: userId,
-      blocks: blocks,
-    };
-    await postChat(body.response_url,'ephemeral',mRequestBody);
-    return;
-  } else if (!cmdBody) {
-    createModal(context, client, body.trigger_id,body.response_url,channel);
-  } else {
-    //const cmd = `/${slackCommand} ${cmdBody}`;
-    let question = null;
-    const options = [];
+    // Replace non-standard quotes with the standard quote, but ignore already escaped quotes
+    const acceptedQuotesPattern = acceptedQuotes.filter(q => q !== standardQuote).map(q => `\\${q}`).join('');
+    if (!cmdBody) {
 
-    let userLang = appLang;
-    let isAnonymous = false;
-    let isLimited = false;
-    let limit = null;
-    let isHidden = false;
-    let isAllowUserAddChoice = false;
-    let fetchArgs = true;
+    } else {
+      cmdBody = cmdBody.replace(new RegExp(`(^|[^\\\\])([${acceptedQuotesPattern}])`, 'g'), `$1${standardQuote}`);
+    }
+    const fullCmd = `/${slackCommand} ${cmdBody}`
+
+    const isHelp = cmdBody ? 'help' === cmdBody : false;
+
+    const channel = (command && command.channel_id) ? command.channel_id : null;
+
+    const userId = (command && command.user_id) ? command.user_id : null;
+
+    const teamOrEntId = getTeamOrEnterpriseId(context);
+    const teamConfig = await getTeamOverride(teamOrEntId);
+    let appLang = gAppLang;
+    if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+
+    let isMenuAtTheEnd = gIsMenuAtTheEnd;
+    let isCompactUI = gIsCompactUI;
+    let isShowDivider = gIsShowDivider;
+    let isShowHelpLink = gIsShowHelpLink;
+    let isShowCommandInfo = gIsShowCommandInfo;
+    let isTrueAnonymous = gTrueAnonymous;
+    let isShowNumberInChoice = gIsShowNumberInChoice;
+    let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
+
+    if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+    if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+    if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
+    if (teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
+    if (teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
+    if (teamConfig.hasOwnProperty("true_anonymous")) isTrueAnonymous = teamConfig.true_anonymous;
+    if (teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
+    if (teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
+
+    let myTz = null;
+    try {
+      const userInfo = await app.client.users.info({
+        token: context.botToken,
+        user: userId
+      });
+      myTz = userInfo?.user?.tz;
+    } catch (e) {
+    }
+
+    if (isHelp) {
+      const blocks = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Open source poll for Slack*',
+          },
+        },
+        {
+          type: 'divider',
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Create a poll using modal*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + "```",
+          },
+        },
+        {
+          type: 'divider',
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Create a poll using command*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with `\\"` and escaped `\\ ` with `\\\\`  ',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '(Supported double quote: ' + getSupportDoubleQuoteToStr() + ')',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Simple poll*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\".\n```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " \"Please select \\\"HELLO\\\" ?\" \"HELLO\" \"HELlo\" \"helLo\" \"HE\\\"LL\\\"O\"\n```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Anonymous poll*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " anonymous \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Hidden poll votes*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " hidden \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Limited choice poll*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Anonymous limited choice poll*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " anonymous limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Allow choices add by others*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " add-choice \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Change poll language for current poll only*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " lang th \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+          },
+        },
+
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Advanced Schedule/Recurring Poll*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
+                "\n/" + slackCommand + " schedule delete [POLL_ID]" +
+                "\n/" + slackCommand + " schedule list" +
+                "\n/" + slackCommand + " schedule delete_done" +
+                "```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "\n- Bot MUST in the channel" +
+                "\n- Only one schedule for each poll, reschedule will replace previous one" +
+                "\n- `POLL_ID` = ID of poll to schedule " +
+                "\n   - You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
+                "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)" +
+                "\n- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
+                "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
+                "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format|[cron expression]>\" in UTC Timezone (with \"Double Quote\")" +
+                "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possible. (`" + gScheduleMaxRun + "` Times)" +
+                "\n\n*NOTE*: If a cron expression results in having more than 1 job within `" + gScheduleLimitHr + "` hours, the Poll will post once, and then the job will get disabled.\n For more information please visit <" + helpLink + "|full document here>." +
+                "",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "Supported cron expression format: ```" +
+                "\n*    *    *    *    *" +
+                "\n┬    ┬    ┬    ┬    ┬" +
+                "\n│    │    │    │    |" +
+                "\n│    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)" +
+                "\n│    │    │    └───── month (1 - 12)" +
+                "\n│    │    └────────── day of month (1 - 31, L)" +
+                "\n│    └─────────────── hour (0 - 23)" +
+                "\n└──────────────────── minute (0 - 59)" +
+                "```",
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "Example:\n" +
+                "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
+                "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"30 12 15 * *\" 12```\n" +
+                "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"30 12 15 * *\" 12```"
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*Config Open Poll for this Workspace*',
+          },
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: "```\n/" + slackCommand + " config```",
+          },
+        },
+        {
+          type: 'divider',
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: parameterizedString(stri18n(appLang, 'info_need_help'), {email: helpEmail, link: helpLink}),
+            //text: stri18n(appLang,'info_need_help')
+          },
+        },
+        // {
+        //   type: 'section',
+        //   text: {
+        //     type: 'mrkdwn',
+        //     text: `${helpEmail}`,
+        //   },
+        // },
+        // {
+        //   type: 'section',
+        //   text: {
+        //     type: 'mrkdwn',
+        //     text: `<${helpLink}|${helpLink}>`,
+        //   },
+        // },
+      ];
+      let mRequestBody = {
+        token: context.botToken,
+        channel: channel,
+        user: userId,
+        blocks: blocks,
+      };
+      await postChat(body.response_url, 'ephemeral', mRequestBody);
+      return;
+    } else if (!cmdBody) {
+      createModal(context, client, body.trigger_id, body.response_url, channel);
+    } else {
+      //const cmd = `/${slackCommand} ${cmdBody}`;
+      let question = null;
+      const options = [];
+
+      let userLang = appLang;
+      let isAnonymous = false;
+      let isLimited = false;
+      let limit = null;
+      let isHidden = false;
+      let isAllowUserAddChoice = false;
+      let fetchArgs = true;
 
 
+      while (fetchArgs) {
+        fetchArgs = false;
+        if (cmdBody.startsWith('anonymous')) {
+          fetchArgs = true;
+          isAnonymous = true;
+          cmdBody = cmdBody.substring(9).trim();
+        } else if (cmdBody.startsWith('schedule')) {
+          cmdBody = cmdBody.substring(8).trim();
 
-    while (fetchArgs) {
-      fetchArgs = false;
-      if (cmdBody.startsWith('anonymous')) {
-        fetchArgs = true;
-        isAnonymous = true;
-        cmdBody = cmdBody.substring(9).trim();
-      } else if (cmdBody.startsWith('schedule')) {
-        cmdBody = cmdBody.substring(8).trim();
-        
-        let isEndOfCmd = false;
-        let schTsText = '';//'2023-11-17T21:54:00+07:00';
-        let schPollID = null;
-        let schCH = null;
-        let schMAXRUN = gScheduleMaxRun;
-        let schCron = null;
-        let schTs = new Date(schTsText);
-        let cmdMode = "";
-        let ignoreOwnerCheck = false;
-        let validConfigUser = "";
-        //get mode
-        let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-        if(inputPara==="") {
-          inputPara=cmdBody;
-          isEndOfCmd =true;
-        }
-        cmdMode = inputPara;
-        //console.log(cmdMode);
-        cmdBody = cmdBody.substring(inputPara.length).trim();
-        let isParaValid = false;
+          let isEndOfCmd = false;
+          let schTsText = '';//'2023-11-17T21:54:00+07:00';
+          let schPollID = null;
+          let schCH = null;
+          let schMAXRUN = gScheduleMaxRun;
+          let schCron = null;
+          let schTs = new Date(schTsText);
+          let cmdMode = "";
+          let ignoreOwnerCheck = false;
+          let validConfigUser = "";
+          //get mode
+          let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+          if (inputPara === "") {
+            inputPara = cmdBody;
+            isEndOfCmd = true;
+          }
+          cmdMode = inputPara;
+          //console.log(cmdMode);
+          cmdBody = cmdBody.substring(inputPara.length).trim();
+          let isParaValid = false;
 
-        if(cmdMode === "create_force") {
-          cmdMode = "create";
-          ignoreOwnerCheck = true;
-        } else if (cmdMode === "delete_force") {
-          cmdMode = "delete";
-          ignoreOwnerCheck = true;
-        } else if (cmdMode === "") {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            //blocks: blocks,
-            text: parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        }
-
-        const team = await getTeamInfo(teamOrEntId);
-        if (team) {
-          if(team.hasOwnProperty("user"))
-            if(team.user.hasOwnProperty("id")) {
-              validConfigUser = team.user.id;
-            }
-        }
-
-        if(ignoreOwnerCheck) {
-          if(userId !== validConfigUser) {
+          if (cmdMode === "create_force") {
+            cmdMode = "create";
+            ignoreOwnerCheck = true;
+          } else if (cmdMode === "delete_force") {
+            cmdMode = "delete";
+            ignoreOwnerCheck = true;
+          } else if (cmdMode === "") {
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
               user: userId,
               //blocks: blocks,
-              text: stri18n(userLang,'err_only_installer'),
+              text: parameterizedString(stri18n(userLang, 'task_usage_help'), {
+                slack_command: slackCommand,
+                help_link: helpLink
+              })
             };
-            await postChat(body.response_url,'ephemeral',mRequestBody);
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
             return;
           }
-        }
 
-
-        //phase POLL_ID
-        inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-        if(inputPara==="") {
-          inputPara=cmdBody;
-          isEndOfCmd =true;
-        }
-        //console.log(inputPara);
-        cmdBody = cmdBody.substring(inputPara.length).trim();
-        isParaValid = false;
-        let chkPollData;
-        if(cmdMode==='create'||cmdMode==='delete') {
-          let idError = "";
-          if(inputPara.trim().length>0) {
-            schPollID = inputPara.trim();
-            try {
-              const calObjId =new ObjectId(schPollID);
-              chkPollData = await pollCol.findOne({ _id: calObjId  });
-              if (!chkPollData) {
-                isParaValid = false;
-                idError = "Not found";
+          const team = await getTeamInfo(teamOrEntId);
+          if (team) {
+            if (team.hasOwnProperty("user"))
+              if (team.user.hasOwnProperty("id")) {
+                validConfigUser = team.user.id;
               }
-              else
-              {
-                if(chkPollData.hasOwnProperty('team') && chkPollData.hasOwnProperty('channel')) {
-                  if(chkPollData.team !== "" && chkPollData.team != null &&
-                      chkPollData.channel !== "" && chkPollData.channel != null
-                  ) {
-                    isParaValid = true;
+          }
+
+          if (ignoreOwnerCheck) {
+            if (userId !== validConfigUser) {
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: stri18n(userLang, 'err_only_installer'),
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+              return;
+            }
+          }
+
+
+          //phase POLL_ID
+          inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+          if (inputPara === "") {
+            inputPara = cmdBody;
+            isEndOfCmd = true;
+          }
+          //console.log(inputPara);
+          cmdBody = cmdBody.substring(inputPara.length).trim();
+          isParaValid = false;
+          let chkPollData;
+          if (cmdMode === 'create' || cmdMode === 'delete') {
+            let idError = "";
+            if (inputPara.trim().length > 0) {
+              schPollID = inputPara.trim();
+              try {
+                const calObjId = new ObjectId(schPollID);
+                chkPollData = await pollCol.findOne({_id: calObjId});
+                if (!chkPollData) {
+                  isParaValid = false;
+                  idError = "Not found";
+                } else {
+                  if (chkPollData.hasOwnProperty('team') && chkPollData.hasOwnProperty('channel')) {
+                    if (chkPollData.team !== "" && chkPollData.team != null &&
+                        chkPollData.channel !== "" && chkPollData.channel != null
+                    ) {
+                      isParaValid = true;
+                    } else {
+                      isParaValid = false;
+                      idError = "Not Support EMPTY";
+                    }
                   } else {
                     isParaValid = false;
-                    idError = "Not Support EMPTY";
+                    idError = "Not Support NO_KEY";
                   }
-                } else {
-                  isParaValid = false;
-                  idError = "Not Support NO_KEY";
                 }
+              } catch (e) {
+                idError = "INVALID";
               }
             }
-            catch (e) {
-              idError = "INVALID";
-            }
-          }
-          if(!isParaValid) {
-            let mRequestBody = {
-              token: context.botToken,
-              channel: channel,
-              user: userId,
-              //blocks: blocks,
-              text: "```"+fullCmd+"```\n"+stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})` + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
-            };
-            await postChat(body.response_url,'ephemeral',mRequestBody);
-            return;
-          } else {
-            //check owner
-            if(!ignoreOwnerCheck) {
-              if (body.user_id !== chkPollData?.user_id) {
-                //logger.debug('reject request because not owner');
-                let mRequestBody = {
-                  token: context.botToken,
-                  channel: channel,
-                  user: userId,
-                  text: "```"+fullCmd+"```\n"+stri18n(appLang,'err_action_other')+" (MISMATCH_USER)",
-                };
-                await postChat(body.response_url,'ephemeral',mRequestBody);
-                return;
-              }
+            if (!isParaValid) {
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: "```" + fullCmd + "```\n" + stri18n(userLang, 'task_error_poll_id_invalid') + `(${idError})` + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'), {
+                  slack_command: slackCommand,
+                  help_link: helpLink
+                })
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+              return;
             } else {
-              //check team
-              if (teamOrEntId !== chkPollData?.team) {
-                //logger.debug('reject request because not valid team');
-                let mRequestBody = {
-                  token: context.botToken,
-                  channel: channel,
-                  user: userId,
-                  text: "```"+fullCmd+"```\n"+stri18n(appLang,'err_action_other')+" (MISMATCH_TEAM)",
-                };
-                await postChat(body.response_url,'ephemeral',mRequestBody);
-                return;
-              }
-            }
-          }
-
-          if(cmdMode==='create') {
-
-            if(isEndOfCmd) {
-              let mRequestBody = {
-                token: context.botToken,
-                channel: channel,
-                user: userId,
-                //blocks: blocks,
-                text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter:"[TS]"}) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
-              };
-              await postChat(body.response_url,'ephemeral',mRequestBody);
-              return;
-            }
-            //phase TS
-            inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-            if(inputPara==="") {
-              inputPara=cmdBody;
-              isEndOfCmd = true;
-            }
-            cmdBody = cmdBody.substring(inputPara.length).trim();
-            isParaValid = false;
-            schTsText = inputPara.trim();
-
-            if (!isValidISO8601(schTsText)) {
-              let mRequestBody = {
-                token: context.botToken,
-                channel: channel,
-                user: userId,
-                //blocks: blocks,
-                text: "```"+fullCmd+"```\n"+stri18n(userLang, 'task_error_date_invalid') + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
-              };
-              await postChat(body.response_url,'ephemeral',mRequestBody);
-              return;
-            }
-
-            //phase CH_ID
-            schCH = null;
-            if(!isEndOfCmd) {
-              inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-              if(inputPara==="") {
-                inputPara=cmdBody;
-                isEndOfCmd = true;
-              }
-              cmdBody = cmdBody.substring(inputPara.length).trim();
-
-              if (inputPara!=='-') {
-                schCH = inputPara.trim();
-
-                try {
-                  const result = await client.conversations.info({
+              //check owner
+              if (!ignoreOwnerCheck) {
+                if (body.user_id !== chkPollData?.user_id) {
+                  //logger.debug('reject request because not owner');
+                  let mRequestBody = {
                     token: context.botToken,
-                    channel: schCH
-                  });
+                    channel: channel,
+                    user: userId,
+                    text: "```" + fullCmd + "```\n" + stri18n(appLang, 'err_action_other') + " (MISMATCH_USER)",
+                  };
+                  await postChat(body.response_url, 'ephemeral', mRequestBody);
+                  return;
                 }
-                catch (e) {
-                  if(e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted'))
-                  {
-                    let mRequestBody = {
-                      token: context.botToken,
-                      channel: channel,
-                      user: userId,
-                      text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CH_ID]",value:inputPara,error_msg:"(Bot not in Channel or not found)"})
-                    };
-                    await postChat(body.response_url,'ephemeral',mRequestBody);
-                    return;
-                  }
-                  else
-                  {
-                    //ignore it!
-                    logger.debug(`Error on client.conversations.info (CH:${schCH}) :`+e.message);
-                    console.log(e);
-                    console.trace();
-                  }
-                }
-
-              }
-            }
-
-            //phase CRON_EXP
-            //schCron = "0 */5 * * * *";
-            if(!isEndOfCmd) {
-              let firstQt = cmdBody.indexOf('"');
-              let lastQt = cmdBody.lastIndexOf('"');
-              if(firstQt!==0 || lastQt===-1 || firstQt===lastQt) {
-                let mRequestBody = {
-                  token: context.botToken,
-                  channel: channel,
-                  user: userId,
-                  text: fullCmd+"\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:cmdBody,error_msg:"Cron Expression should enclosed in Double Quote marks \"* * * * *\""})
-                };
-                await postChat(body.response_url,'ephemeral',mRequestBody);
-                return;
-              }
-
-
-              inputPara = (cmdBody.substring(1, lastQt));
-              cmdBody = cmdBody.substring(inputPara.length+2).trim();
-              if(cmdBody==="") isEndOfCmd = true;
-
-              //test cron
-              const nextScheduleTime = calculateNextScheduleTime(inputPara,null);
-
-              if (!nextScheduleTime) {
-                let mRequestBody = {
-                  token: context.botToken,
-                  channel: channel,
-                  user: userId,
-                  text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[CRON_EXP]",value:inputPara,error_msg:"Cron Expression is invalid"})
-                };
-                await postChat(body.response_url,'ephemeral',mRequestBody);
-                return;
               } else {
-                schCron = inputPara;
+                //check team
+                if (teamOrEntId !== chkPollData?.team) {
+                  //logger.debug('reject request because not valid team');
+                  let mRequestBody = {
+                    token: context.botToken,
+                    channel: channel,
+                    user: userId,
+                    text: "```" + fullCmd + "```\n" + stri18n(appLang, 'err_action_other') + " (MISMATCH_TEAM)",
+                  };
+                  await postChat(body.response_url, 'ephemeral', mRequestBody);
+                  return;
+                }
               }
             }
 
-            //phase MAX_RUN
-            if(!isEndOfCmd) {
+            if (cmdMode === 'create') {
+
+              if (isEndOfCmd) {
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  user: userId,
+                  //blocks: blocks,
+                  text: "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'err_para_missing'), {parameter: "[TS]"}) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'), {
+                    slack_command: slackCommand,
+                    help_link: helpLink
+                  })
+                };
+                await postChat(body.response_url, 'ephemeral', mRequestBody);
+                return;
+              }
+              //phase TS
               inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-              if(inputPara==="") {
-                inputPara=cmdBody;
+              if (inputPara === "") {
+                inputPara = cmdBody;
                 isEndOfCmd = true;
               }
               cmdBody = cmdBody.substring(inputPara.length).trim();
+              isParaValid = false;
+              schTsText = inputPara.trim();
 
-              if (!isNaN(parseInt(inputPara)) && parseInt(inputPara)>=1) {
-                schMAXRUN = parseInt(inputPara);
-              } else {
+              if (!isValidISO8601(schTsText)) {
                 let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
                   user: userId,
-                  text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'err_para_invalid'), {parameter:"[MAX_RUN]",value:inputPara,error_msg:""})
+                  //blocks: blocks,
+                  text: "```" + fullCmd + "```\n" + stri18n(userLang, 'task_error_date_invalid') + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'), {
+                    slack_command: slackCommand,
+                    help_link: helpLink
+                  })
                 };
-                await postChat(body.response_url,'ephemeral',mRequestBody);
+                await postChat(body.response_url, 'ephemeral', mRequestBody);
                 return;
               }
+
+              //phase CH_ID
+              schCH = null;
+              if (!isEndOfCmd) {
+                inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+                if (inputPara === "") {
+                  inputPara = cmdBody;
+                  isEndOfCmd = true;
+                }
+                cmdBody = cmdBody.substring(inputPara.length).trim();
+
+                if (inputPara !== '-') {
+                  schCH = inputPara.trim();
+
+                  try {
+                    const result = await client.conversations.info({
+                      token: context.botToken,
+                      channel: schCH
+                    });
+                  } catch (e) {
+                    if (e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted')) {
+                      let mRequestBody = {
+                        token: context.botToken,
+                        channel: channel,
+                        user: userId,
+                        text: "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'err_para_invalid'), {
+                          parameter: "[CH_ID]",
+                          value: inputPara,
+                          error_msg: "(Bot not in Channel or not found)"
+                        })
+                      };
+                      await postChat(body.response_url, 'ephemeral', mRequestBody);
+                      return;
+                    } else {
+                      //ignore it!
+                      logger.debug(`Error on client.conversations.info (CH:${schCH}) :` + e.message);
+                      console.log(e);
+                      console.trace();
+                    }
+                  }
+
+                }
+              }
+
+              //phase CRON_EXP
+              //schCron = "0 */5 * * * *";
+              if (!isEndOfCmd) {
+                let firstQt = cmdBody.indexOf('"');
+                let lastQt = cmdBody.lastIndexOf('"');
+                if (firstQt !== 0 || lastQt === -1 || firstQt === lastQt) {
+                  let mRequestBody = {
+                    token: context.botToken,
+                    channel: channel,
+                    user: userId,
+                    text: fullCmd + "\n" + parameterizedString(stri18n(userLang, 'err_para_invalid'), {
+                      parameter: "[CRON_EXP]",
+                      value: cmdBody,
+                      error_msg: "Cron Expression should enclosed in Double Quote marks \"* * * * *\""
+                    })
+                  };
+                  await postChat(body.response_url, 'ephemeral', mRequestBody);
+                  return;
+                }
+
+
+                inputPara = (cmdBody.substring(1, lastQt));
+                cmdBody = cmdBody.substring(inputPara.length + 2).trim();
+                if (cmdBody === "") isEndOfCmd = true;
+
+                //test cron
+                const nextScheduleTime = calculateNextScheduleTime(inputPara, null);
+
+                if (!nextScheduleTime) {
+                  let mRequestBody = {
+                    token: context.botToken,
+                    channel: channel,
+                    user: userId,
+                    text: "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'err_para_invalid'), {
+                      parameter: "[CRON_EXP]",
+                      value: inputPara,
+                      error_msg: "Cron Expression is invalid"
+                    })
+                  };
+                  await postChat(body.response_url, 'ephemeral', mRequestBody);
+                  return;
+                } else {
+                  schCron = inputPara;
+                }
+              }
+
+              //phase MAX_RUN
+              if (!isEndOfCmd) {
+                inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+                if (inputPara === "") {
+                  inputPara = cmdBody;
+                  isEndOfCmd = true;
+                }
+                cmdBody = cmdBody.substring(inputPara.length).trim();
+
+                if (!isNaN(parseInt(inputPara)) && parseInt(inputPara) >= 1) {
+                  schMAXRUN = parseInt(inputPara);
+                } else {
+                  let mRequestBody = {
+                    token: context.botToken,
+                    channel: channel,
+                    user: userId,
+                    text: "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'err_para_invalid'), {
+                      parameter: "[MAX_RUN]",
+                      value: inputPara,
+                      error_msg: ""
+                    })
+                  };
+                  await postChat(body.response_url, 'ephemeral', mRequestBody);
+                  return;
+                }
+              }
+
+              schTs = new Date(schTsText);
+
+              const dataToInsert = {
+                poll_id: new ObjectId(schPollID),
+                next_ts: schTs,
+                created_cmd: fullCmd,
+                created_ts: new Date(),
+                created_user_id: userId,
+                run_max: schMAXRUN,
+                is_done: false,
+                is_enable: true,
+                poll_ch: schCH,
+                cron_string: schCron,
+              };
+
+              // Insert the data into scheduleCol
+              //await scheduleCol.insertOne(dataToInsert);
+              await scheduleCol.replaceOne(
+                  {poll_id: new ObjectId(dataToInsert.poll_id)}, // Filter document with the same poll_id
+                  dataToInsert, // New document to be inserted
+                  {upsert: true} // Option to insert a new document if no matching document is found
+              );
+
+              let actString = "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'task_scheduled'), {
+                poll_id: schPollID,
+                ts: schTsText,
+                poll_ch: schCH,
+                run_max: schMAXRUN
+              });
+
+              if (schCron !== null) {
+                actString += "\n" + parameterizedString(stri18n(userLang, 'task_scheduled_with_cron'), {
+                  cron: schCron,
+                  run_max_hrs: gScheduleLimitHr
+                });
+              }
+
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                text: actString
+                ,
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+
+              logger.verbose(`[Schedule] New schedule, Poll ID: ${schPollID}`);
+              return;
+
+            } else if (cmdMode === 'delete') {
+              // const updateRes = await scheduleCol.updateMany(
+              //     { poll_id: schPollID },
+              //     { $set: { is_enable: false,is_done: true, last_error_ts: new Date(), last_error_text: "Disable by user request"} }
+              // ); //updateRes.modifiedCount
+              const deleteRes = await scheduleCol.deleteMany(
+                  {poll_id: new ObjectId(schPollID)}
+              );
+
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: parameterizedString(stri18n(userLang, 'task_delete'), {
+                  poll_id: schPollID,
+                  deleted_count: deleteRes.deletedCount
+                })
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+              return;
             }
 
-            schTs = new Date(schTsText);
+          } else if (cmdMode === "delete_done") {
 
-            const dataToInsert = {
-              poll_id: new ObjectId(schPollID),
-              next_ts: schTs,
-              created_cmd: fullCmd,
-              created_ts: new Date(),
-              created_user_id: userId,
-              run_max: schMAXRUN,
-              is_done: false,
-              is_enable: true,
-              poll_ch: schCH,
-              cron_string: schCron,
-            };
+            let deletedCount = 0;
+            if (userId !== validConfigUser) {
+              // let mRequestBody = {
+              //   token: context.botToken,
+              //   channel: channel,
+              //   //blocks: blocks,
+              //   text: stri18n(userLang,'err_only_installer'),
+              // };
+              // await postChat(body.response_url,'ephemeral',mRequestBody);
+              // return;
+              const deleteRes = await scheduleCol.deleteMany(
+                  {created_user_id: userId, is_enable: false}
+              );
+              deletedCount = deleteRes.deletedCount;
+            } else {
+              const queryRes = await scheduleCol.aggregate([
+                {
+                  $match: {is_enable: false} // Filter by is_enable before the lookup
+                },
+                {
+                  $lookup: {
+                    from: 'poll_data', // collection to join
+                    localField: 'poll_id', // field from the input documents
+                    foreignField: '_id', // field from the documents of the "from" collection
+                    as: 'pollData' // output array field
+                  }
+                },
+                {
+                  $match: {'pollData.team': teamOrEntId} // match condition
+                },
+                {
+                  $unwind: '$pollData' // deconstructs the 'pollData' array
+                }
+              ]).toArray();
 
-            // Insert the data into scheduleCol
-            //await scheduleCol.insertOne(dataToInsert);
-            await scheduleCol.replaceOne(
-                { poll_id: new ObjectId(dataToInsert.poll_id) }, // Filter document with the same poll_id
-                dataToInsert, // New document to be inserted
-                { upsert: true } // Option to insert a new document if no matching document is found
-            );
+              const idsToDelete = queryRes.map(doc => doc._id);
 
-            let actString = "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'task_scheduled'), {poll_id: schPollID,ts:schTsText,poll_ch:schCH,run_max:schMAXRUN});
-
-            if(schCron !== null) {
-              actString += "\n"+parameterizedString(stri18n(userLang, 'task_scheduled_with_cron'),{cron:schCron,run_max_hrs:gScheduleLimitHr});
+              const deleteRes = await scheduleCol.deleteMany(
+                  {_id: {$in: idsToDelete}}
+              );
+              deletedCount = deleteRes.deletedCount;
             }
+
 
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
               user: userId,
-              text: actString
-              ,
+              text: parameterizedString(stri18n(userLang, 'task_delete_multiple'), {deleted_count: deletedCount}),
             };
-            await postChat(body.response_url,'ephemeral',mRequestBody);
-
-            logger.verbose(`[Schedule] New schedule, Poll ID: ${schPollID}`);
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
             return;
 
-          } else if (cmdMode==='delete') {
-            // const updateRes = await scheduleCol.updateMany(
-            //     { poll_id: schPollID },
-            //     { $set: { is_enable: false,is_done: true, last_error_ts: new Date(), last_error_text: "Disable by user request"} }
-            // ); //updateRes.modifiedCount
-            const deleteRes = await scheduleCol.deleteMany(
-                { poll_id: new ObjectId(schPollID) }
-            );
 
-            let mRequestBody = {
-              token: context.botToken,
-              channel: channel,
-              user: userId,
-              //blocks: blocks,
-              text: parameterizedString(stri18n(userLang, 'task_delete'), {poll_id:schPollID,deleted_count:deleteRes.deletedCount} )
-            };
-            await postChat(body.response_url,'ephemeral',mRequestBody);
-            return;
-          }
-
-        } else if (cmdMode === "delete_done") {
-
-          let deletedCount = 0;
-          if(userId !== validConfigUser) {
-            // let mRequestBody = {
-            //   token: context.botToken,
-            //   channel: channel,
-            //   //blocks: blocks,
-            //   text: stri18n(userLang,'err_only_installer'),
-            // };
-            // await postChat(body.response_url,'ephemeral',mRequestBody);
-            // return;
-            const deleteRes = await scheduleCol.deleteMany(
-                { created_user_id: userId, is_enable: false }
-            );
-            deletedCount = deleteRes.deletedCount;
-          } else {
+          } else if (cmdMode === "list_self" || cmdMode === "list") {
             const queryRes = await scheduleCol.aggregate([
               {
-                $match: { is_enable: false } // Filter by is_enable before the lookup
+                $match: {created_user_id: body.user_id} // Filter by is_enable before the lookup
               },
               {
                 $lookup: {
@@ -1986,556 +2066,527 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
                   as: 'pollData' // output array field
                 }
               },
+              // {
+              //   $match: { 'pollData.user_id': body.user_id } // match condition
+              // },
               {
-                $match: { 'pollData.team': teamOrEntId } // match condition
+                $unwind: '$pollData' // deconstructs the 'pollData' array
+              }
+            ]).toArray();
+
+            //console.log(queryRes);
+            let resString = "";
+            let foundCount = 0;
+            for (const item of queryRes) {
+              let cronHumanText = "";
+              if (item?.cron_string && item?.cron_string !== "") {
+                try {
+                  cronHumanText = cronstrue.toString(item?.cron_string, cronstrueOp) + ", ";
+                } catch (e) {
+                }
+              }
+              resString += "```";
+              resString += `Poll ID: ${item.poll_id}\n`;
+              resString += `Next Run: ` + localizeTimeStamp(myTz, item.next_ts) + `\n`;
+              resString += `Cron Expression: ${item.cron_string} (${cronHumanText}UTC Time Zone)\n`;
+              resString += `Enable: ${item.is_enable}\n`;
+              resString += `Override CH: ${item.poll_ch}\n`;
+              //resString+=`Question : ${item.pollData?.question}\n`;
+              resString += `CMD : ${item.pollData?.cmd}\n`;
+              resString += `Run Counter : ${item.run_counter}/${item.run_max ?? gScheduleMaxRun}\n`;
+              resString += `Last Error : ${item.last_error_text}\n`;
+              resString += `Last Error TS : ` + localizeTimeStamp(myTz, item.last_error_ts) + `\n`;
+              resString += "```\n";
+              foundCount++;
+            }
+
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              text: parameterizedString(stri18n(userLang, 'task_list'), {
+                poll_count: foundCount,
+                slack_command: slackCommand
+              }) + "\n" + resString,
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+
+
+          } else if (cmdMode === "list_all") {
+            if (userId !== validConfigUser) {
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: stri18n(userLang, 'err_only_installer'),
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+              return;
+            }
+            const queryRes = await scheduleCol.aggregate([
+              // {
+              //   $match: { created_user_id: body.user_id } // Filter by is_enable before the lookup
+              // },
+              {
+                $lookup: {
+                  from: 'poll_data', // collection to join
+                  localField: 'poll_id', // field from the input documents
+                  foreignField: '_id', // field from the documents of the "from" collection
+                  as: 'pollData' // output array field
+                }
+              },
+              {
+                $match: {'pollData.team': teamOrEntId} // match condition
               },
               {
                 $unwind: '$pollData' // deconstructs the 'pollData' array
               }
             ]).toArray();
 
-            const idsToDelete = queryRes.map(doc => doc._id);
-
-            const deleteRes = await scheduleCol.deleteMany(
-                { _id: { $in: idsToDelete } }
-            );
-            deletedCount = deleteRes.deletedCount;
-          }
-
-
-
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            text: parameterizedString(stri18n(userLang, 'task_delete_multiple'), {deleted_count:deletedCount} ) ,
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-
-
-        } else if (cmdMode === "list_self" || cmdMode === "list" ) {
-          const queryRes = await scheduleCol.aggregate([
-            {
-              $match: { created_user_id: body.user_id } // Filter by is_enable before the lookup
-            },
-            {
-              $lookup: {
-                from: 'poll_data', // collection to join
-                localField: 'poll_id', // field from the input documents
-                foreignField: '_id', // field from the documents of the "from" collection
-                as: 'pollData' // output array field
+            //console.log(queryRes);
+            let resString = "";
+            let foundCount = 0;
+            for (const item of queryRes) {
+              let cronHumanText = "";
+              if (item?.cron_string && item?.cron_string !== "") {
+                try {
+                  cronHumanText = cronstrue.toString(item?.cron_string, cronstrueOp) + ", ";
+                } catch (e) {
+                }
               }
-            },
-            // {
-            //   $match: { 'pollData.user_id': body.user_id } // match condition
-            // },
-            {
-              $unwind: '$pollData' // deconstructs the 'pollData' array
+              resString += "```";
+              resString += `Poll ID: ${item.poll_id}\n`;
+              resString += `Owner: ${item.created_user_id}\n`;
+              resString += `Next Run: ` + localizeTimeStamp(myTz, item.next_ts) + `\n`;
+              resString += `Cron Expression: ${item.cron_string} (${cronHumanText}UTC Time Zone)\n`;
+              resString += `Enable: ${item.is_enable}\n`;
+              resString += `Override CH: ${item.poll_ch}\n`;
+              //resString+=`Question : ${item.pollData?.question}\n`;
+              resString += `CMD : ${item.pollData?.cmd}\n`;
+              resString += `Run Counter : ${item.run_counter}/${item.run_max ?? gScheduleMaxRun}\n`;
+              resString += `Last Error : ${item.last_error_text}\n`;
+              resString += `Last Error TS : ` + localizeTimeStamp(myTz, item.last_error_ts) + `\n`;
+              resString += "```\n";
+              foundCount++;
             }
-          ]).toArray();
 
-          //console.log(queryRes);
-          let resString = "";
-          let foundCount = 0;
-          for (const item of queryRes) {
-            let cronHumanText = "";
-            if(item?.cron_string && item?.cron_string !== "") {
-              try {
-                cronHumanText = cronstrue.toString(item?.cron_string, cronstrueOp)+", ";
-              } catch (e) { }
-            }
-            resString+="```";
-            resString+=`Poll ID: ${item.poll_id}\n`;
-            resString+=`Next Run: `+localizeTimeStamp(myTz,item.next_ts)+`\n`;
-            resString+=`Cron Expression: ${item.cron_string} (${cronHumanText}UTC Time Zone)\n`;
-            resString+=`Enable: ${item.is_enable}\n`;
-            resString+=`Override CH: ${item.poll_ch}\n`;
-            //resString+=`Question : ${item.pollData?.question}\n`;
-            resString+=`CMD : ${item.pollData?.cmd}\n`;
-            resString+=`Run Counter : ${item.run_counter}/${item.run_max??gScheduleMaxRun}\n`;
-            resString+=`Last Error : ${item.last_error_text}\n`;
-            resString+=`Last Error TS : `+localizeTimeStamp(myTz,item.last_error_ts)+`\n`;
-            resString+="```\n";
-            foundCount++;
-          }
-
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount,slack_command:slackCommand} ) +"\n"+ resString,
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-
-
-        } else if (cmdMode === "list_all") {
-          if(userId !== validConfigUser) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              text: parameterizedString(stri18n(userLang, 'task_list'), {
+                poll_count: foundCount,
+                slack_command: slackCommand
+              }) + "\n" + resString,
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+          } else {
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
               user: userId,
               //blocks: blocks,
-              text: stri18n(userLang,'err_only_installer'),
+              text: "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command: slackCommand}) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'), {
+                slack_command: slackCommand,
+                help_link: helpLink
+              })
             };
-            await postChat(body.response_url,'ephemeral',mRequestBody);
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
             return;
           }
-          const queryRes = await scheduleCol.aggregate([
-            // {
-            //   $match: { created_user_id: body.user_id } // Filter by is_enable before the lookup
-            // },
-            {
-              $lookup: {
-                from: 'poll_data', // collection to join
-                localField: 'poll_id', // field from the input documents
-                foreignField: '_id', // field from the documents of the "from" collection
-                as: 'pollData' // output array field
-              }
-            },
-            {
-              $match: { 'pollData.team': teamOrEntId } // match condition
-            },
-            {
-              $unwind: '$pollData' // deconstructs the 'pollData' array
-            }
-          ]).toArray();
-
-          //console.log(queryRes);
-          let resString = "";
-          let foundCount = 0;
-          for (const item of queryRes) {
-            let cronHumanText = "";
-            if(item?.cron_string && item?.cron_string !== "") {
-              try {
-                cronHumanText = cronstrue.toString(item?.cron_string, cronstrueOp)+", ";
-              } catch (e) { }
-            }
-            resString+="```";
-            resString+=`Poll ID: ${item.poll_id}\n`;
-            resString+=`Owner: ${item.created_user_id}\n`;
-            resString+=`Next Run: `+localizeTimeStamp(myTz,item.next_ts)+`\n`;
-            resString+=`Cron Expression: ${item.cron_string} (${cronHumanText}UTC Time Zone)\n`;
-            resString+=`Enable: ${item.is_enable}\n`;
-            resString+=`Override CH: ${item.poll_ch}\n`;
-            //resString+=`Question : ${item.pollData?.question}\n`;
-            resString+=`CMD : ${item.pollData?.cmd}\n`;
-            resString+=`Run Counter : ${item.run_counter}/${item.run_max??gScheduleMaxRun}\n`;
-            resString+=`Last Error : ${item.last_error_text}\n`;
-            resString+=`Last Error TS : `+localizeTimeStamp(myTz,item.last_error_ts)+`\n`;
-            resString+="```\n";
-            foundCount++;
-          }
-
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            text: parameterizedString(stri18n(userLang, 'task_list'), {poll_count:foundCount,slack_command:slackCommand} ) +"\n"+ resString,
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
           return;
-        } else {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            //blocks: blocks,
-            text: "```"+fullCmd+"```\n"+parameterizedString(stri18n(userLang, 'task_error_command_invalid'), {slack_command:slackCommand} ) + "\n" + parameterizedString(stri18n(userLang, 'task_usage_help'),{slack_command: slackCommand,help_link: helpLink})
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        }
-        return;
-        
-
-      } else if (cmdBody.startsWith('test')) {
-        //test functiom
-        try {
-          logger.debug(context);
-          cmdBody = cmdBody.substring(4).trim();
-          let teamId = getTeamOrEnterpriseId(context);
-          logger.debug("TeamID:" + teamId);
-
-          // const userInfo = await app.client.users.info({
-          //   token: context.botToken,
-          //   user: userId
-          // });
-          //
-          const testDate = new Date();
-          const testDateStr = testDate.toString();
-          let mRequestBody = {
-            token: context.botToken,
-            channel: cmdBody,
-            //blocks: blocks,
-            text: `UserID ${userId} Date ${testDateStr}}\n` +
-                //`Your time zone is: ${userInfo?.user?.tz} (${userInfo?.user?.tz_label}, Offset: ${userInfo?.user?.tz_offset} seconds)\n`+
-                (await getAndlocalizeTimeStamp(context.botToken,userId,testDate))
-            ,
-          };
-          //logger.debug(mRequestBody);
-          await postChat(body.response_url, 'post', mRequestBody);
-          return;
-        } catch (e)
-        {
-          logger.debug("Error: Failed to get user timezone");
-          logger.debug(e.toString()+"\n"+e.stack);
-        }
 
 
-      } else if (cmdBody.startsWith('limit')) {
-        fetchArgs = true;
-        cmdBody = cmdBody.substring(5).trim();
-        isLimited = true;
-        if (!isNaN(parseInt(cmdBody.charAt(0)))) {
-          limit = parseInt(cmdBody.substring(0, cmdBody.indexOf(' ')));
-          cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
-        }
-      } else if (cmdBody.startsWith('lang')) {
-        fetchArgs = true;
-        cmdBody = cmdBody.substring(4).trim();
-        let inputLang = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-        if(langList.hasOwnProperty(inputLang)){
-          userLang = inputLang;
-        }
-
-        cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
-      } else if (cmdBody.startsWith('hidden')) {
-        fetchArgs = true;
-        cmdBody = cmdBody.substring(6).trim();
-        isHidden = true;
-      } else if (cmdBody.startsWith('add-choice')) {
-        fetchArgs = true;
-        cmdBody = cmdBody.substring(10).trim();
-        isAllowUserAddChoice = true;
-      } else if (cmdBody.startsWith('config')) {
-        await respond(`/${slackCommand} ${command.text}`);
-        fetchArgs = true;
-        cmdBody = cmdBody.substring(6).trim();
-
-        let validWritePara = `\n/${slackCommand} config write app_lang [`;
-        let isFirstLang = true;
-        for (let key in langList) {
-          if(isFirstLang) isFirstLang = false;
-          else validWritePara += "/";
-          validWritePara += key;
-        }
-        validWritePara += "]";
-        for (const eachOverrideable of validTeamOverrideConfigTF) {
-          validWritePara += `\n/${slackCommand} config write ${eachOverrideable} [true/false]`;
-        }
-
-        validWritePara +=  '\n'+parameterizedString(stri18n(userLang, 'info_need_help'), {email: helpEmail,link:helpLink});
-        //validWritePara += `\n${helpEmail}\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
-        //let teamOrEntId = getTeamOrEnterpriseId(context);
-        let team = await orgCol.findOne(
-            {
-              $or: [
-                {'team.id': teamOrEntId},
-                {'enterprise.id': teamOrEntId},
-              ]
-            }
-        );
-        let validConfigUser = "";
-        if (team) {
-          if(team.hasOwnProperty("user"))
-            if(team.user.hasOwnProperty("id")) {
-              validConfigUser = team.user.id;
-            }
-        }
-        else {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            //blocks: blocks,
-            text: `Error while reading config`,
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        }
-
-        if(body.user_id !== validConfigUser) {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            //blocks: blocks,
-            text: stri18n(userLang,'err_only_installer'),
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        }
-
-        if(cmdBody.startsWith("read")){
-
-
-          let configTxt = "Config: not found";
-          if (team) {
-            if(team.hasOwnProperty("openPollConfig")) {
-              configTxt = "Override found:\n```"+JSON.stringify(team.openPollConfig)+"```";
-
-            }
-            else {
-              configTxt = "No override: using server setting";
-            }
-          }
-
-
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            //blocks: blocks,
-            text: `${configTxt}`,
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        } else if (cmdBody.startsWith("write")){
-          cmdBody = cmdBody.substring(5).trim();
-
-          let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
-          let isWriteValid = false;
-
-          if(validTeamOverrideConfigTF.includes(inputPara)) {
-            cmdBody = cmdBody.substring(inputPara.length).trim();
-            isWriteValid = true;
-          }
-
-          if(inputPara==="app_lang") {
-            cmdBody = cmdBody.substring(8).trim();
-            isWriteValid = true;
-          }
-
-          if(isWriteValid) {
-            let inputVal = cmdBody.trim();
-            if(inputPara==="app_lang") {
-              if(!langList.hasOwnProperty(inputVal)){
-                let mRequestBody = {
-                  token: context.botToken,
-                  channel: channel,
-                  user: userId,
-                  //blocks: blocks,
-                  text: `Lang file [${inputVal}] not found`,
-                };
-                await postChat(body.response_url,'ephemeral',mRequestBody);
-                return;
-              }
-            } else {
-              if (cmdBody.startsWith("true")) {
-                inputVal = true;
-              } else if (cmdBody.startsWith("false")) {
-                inputVal = false;
-              }
-              else {
-                let mRequestBody = {
-                  token: context.botToken,
-                  channel: channel,
-                  user: userId,
-                  //blocks: blocks,
-                  text: `Usage: ${inputPara} [true/false]`,
-                };
-                await postChat(body.response_url,'ephemeral',mRequestBody);
-                return;
-              }
-          }
-          if(!team.hasOwnProperty("openPollConfig")) team.openPollConfig = {};
-          team.openPollConfig.isset = true;
-          team.openPollConfig[inputPara] = inputVal;
-          //logger.info(team);
+        } else if (cmdBody.startsWith('test')) {
+          //test functiom
           try {
-              //await orgCol.replaceOne({'team.id': getTeamOrEnterpriseId(body)}, team);
-              await orgCol.replaceOne(
-                  {
-                    $or: [
-                      {'team.id': teamOrEntId},
-                      {'enterprise.id': teamOrEntId},
-                    ]
-                  }
-                  , team);
+            logger.debug(context);
+            cmdBody = cmdBody.substring(4).trim();
+            let teamId = getTeamOrEnterpriseId(context);
+            logger.debug("TeamID:" + teamId);
+
+            // const userInfo = await app.client.users.info({
+            //   token: context.botToken,
+            //   user: userId
+            // });
+            //
+            const testDate = new Date();
+            const testDateStr = testDate.toString();
+            let mRequestBody = {
+              token: context.botToken,
+              channel: cmdBody,
+              //blocks: blocks,
+              text: `UserID ${userId} Date ${testDateStr}}\n` +
+                  //`Your time zone is: ${userInfo?.user?.tz} (${userInfo?.user?.tz_label}, Offset: ${userInfo?.user?.tz_offset} seconds)\n`+
+                  (await getAndlocalizeTimeStamp(context.botToken, userId, testDate))
+              ,
+            };
+            //logger.debug(mRequestBody);
+            await postChat(body.response_url, 'post', mRequestBody);
+            return;
+          } catch (e) {
+            logger.debug("Error: Failed to get user timezone");
+            logger.debug(e.toString() + "\n" + e.stack);
           }
-          catch (e) {
-              logger.error(e);
-              let mRequestBody = {
+
+
+        } else if (cmdBody.startsWith('limit')) {
+          fetchArgs = true;
+          cmdBody = cmdBody.substring(5).trim();
+          isLimited = true;
+          if (!isNaN(parseInt(cmdBody.charAt(0)))) {
+            limit = parseInt(cmdBody.substring(0, cmdBody.indexOf(' ')));
+            cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
+          }
+        } else if (cmdBody.startsWith('lang')) {
+          fetchArgs = true;
+          cmdBody = cmdBody.substring(4).trim();
+          let inputLang = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+          if (langList.hasOwnProperty(inputLang)) {
+            userLang = inputLang;
+          }
+
+          cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
+        } else if (cmdBody.startsWith('hidden')) {
+          fetchArgs = true;
+          cmdBody = cmdBody.substring(6).trim();
+          isHidden = true;
+        } else if (cmdBody.startsWith('add-choice')) {
+          fetchArgs = true;
+          cmdBody = cmdBody.substring(10).trim();
+          isAllowUserAddChoice = true;
+        } else if (cmdBody.startsWith('config')) {
+          await respond(`/${slackCommand} ${command.text}`);
+          fetchArgs = true;
+          cmdBody = cmdBody.substring(6).trim();
+
+          let validWritePara = `\n/${slackCommand} config write app_lang [`;
+          let isFirstLang = true;
+          for (let key in langList) {
+            if (isFirstLang) isFirstLang = false;
+            else validWritePara += "/";
+            validWritePara += key;
+          }
+          validWritePara += "]";
+          for (const eachOverrideable of validTeamOverrideConfigTF) {
+            validWritePara += `\n/${slackCommand} config write ${eachOverrideable} [true/false]`;
+          }
+
+          validWritePara += '\n' + parameterizedString(stri18n(userLang, 'info_need_help'), {
+            email: helpEmail,
+            link: helpLink
+          });
+          //validWritePara += `\n${helpEmail}\n<${helpLink}|`+stri18n(userLang,'info_need_help')+`>`;
+          //let teamOrEntId = getTeamOrEnterpriseId(context);
+          let team = await orgCol.findOne(
+              {
+                $or: [
+                  {'team.id': teamOrEntId},
+                  {'enterprise.id': teamOrEntId},
+                ]
+              }
+          );
+          let validConfigUser = "";
+          if (team) {
+            if (team.hasOwnProperty("user"))
+              if (team.user.hasOwnProperty("id")) {
+                validConfigUser = team.user.id;
+              }
+          } else {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              //blocks: blocks,
+              text: `Error while reading config`,
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+          }
+
+          if (body.user_id !== validConfigUser) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              //blocks: blocks,
+              text: stri18n(userLang, 'err_only_installer'),
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+          }
+
+          if (cmdBody.startsWith("read")) {
+
+
+            let configTxt = "Config: not found";
+            if (team) {
+              if (team.hasOwnProperty("openPollConfig")) {
+                configTxt = "Override found:\n```" + JSON.stringify(team.openPollConfig) + "```";
+
+              } else {
+                configTxt = "No override: using server setting";
+              }
+            }
+
+
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              //blocks: blocks,
+              text: `${configTxt}`,
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+          } else if (cmdBody.startsWith("write")) {
+            cmdBody = cmdBody.substring(5).trim();
+
+            let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+            let isWriteValid = false;
+
+            if (validTeamOverrideConfigTF.includes(inputPara)) {
+              cmdBody = cmdBody.substring(inputPara.length).trim();
+              isWriteValid = true;
+            }
+
+            if (inputPara === "app_lang") {
+              cmdBody = cmdBody.substring(8).trim();
+              isWriteValid = true;
+            }
+
+            if (isWriteValid) {
+              let inputVal = cmdBody.trim();
+              if (inputPara === "app_lang") {
+                if (!langList.hasOwnProperty(inputVal)) {
+                  let mRequestBody = {
+                    token: context.botToken,
+                    channel: channel,
+                    user: userId,
+                    //blocks: blocks,
+                    text: `Lang file [${inputVal}] not found`,
+                  };
+                  await postChat(body.response_url, 'ephemeral', mRequestBody);
+                  return;
+                }
+              } else {
+                if (cmdBody.startsWith("true")) {
+                  inputVal = true;
+                } else if (cmdBody.startsWith("false")) {
+                  inputVal = false;
+                } else {
+                  let mRequestBody = {
+                    token: context.botToken,
+                    channel: channel,
+                    user: userId,
+                    //blocks: blocks,
+                    text: `Usage: ${inputPara} [true/false]`,
+                  };
+                  await postChat(body.response_url, 'ephemeral', mRequestBody);
+                  return;
+                }
+              }
+              if (!team.hasOwnProperty("openPollConfig")) team.openPollConfig = {};
+              team.openPollConfig.isset = true;
+              team.openPollConfig[inputPara] = inputVal;
+              //logger.info(team);
+              try {
+                //await orgCol.replaceOne({'team.id': getTeamOrEnterpriseId(body)}, team);
+                await orgCol.replaceOne(
+                    {
+                      $or: [
+                        {'team.id': teamOrEntId},
+                        {'enterprise.id': teamOrEntId},
+                      ]
+                    }
+                    , team);
+              } catch (e) {
+                logger.error(e);
+                let mRequestBody = {
                   token: context.botToken,
                   channel: channel,
-                user: userId,
+                  user: userId,
                   //blocks: blocks,
                   text: `Error while update [${inputPara}] to [${inputVal}]`,
+                };
+                await postChat(body.response_url, 'ephemeral', mRequestBody);
+                return;
+
+              }
+
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: `[${inputPara}] is set to [${inputVal}] for this Team`,
               };
-              await postChat(body.response_url,'ephemeral',mRequestBody);
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
               return;
 
-          }
-
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            //blocks: blocks,
-            text: `[${inputPara}] is set to [${inputVal}] for this Team`,
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-
-        }
-        else {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            //blocks: blocks,
-            text: `[${inputPara}] is not valid config parameter or value is missing\nUsage: ${validWritePara}`,
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        }
+            } else {
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: `[${inputPara}] is not valid config parameter or value is missing\nUsage: ${validWritePara}`,
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+              return;
+            }
 
 
-
-        } else {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: channel,
-            user: userId,
-            //blocks: blocks,
-            text: `Usage:\n/${slackCommand} config read`+
-                  `\n${validWritePara}`
-            ,
-          };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
-        }
-
-      }
-    }
-
-    //V1
-    // const lastSep = cmdBody.split('').pop();
-    // const firstSep = cmdBody.charAt(0);
-
-    if (isLimited && null === limit) {
-      limit = 1;
-    }
-
-    try {
-      //V1
-      // const regexp = new RegExp(firstSep+'[^'+firstSep+'\\\\]*(?:\\\\[\S\s][^'+lastSep+'\\\\]*)*'+lastSep, 'g');
-      // for (let option of cmdBody.match(regexp)) {
-      //   let opt = option.substring(1, option.length - 1);
-      //   if (question === null) {
-      //     question = opt;
-      //   } else {
-      //     options.push(opt);
-      //   }
-      // }
-
-      //V2
-      // const regexp = new RegExp(`${firstSep}(?:[^${firstSep}\\\\]|\\\\.)*${lastSep}`, 'g');
-      // const matches = cmdBody.match(regexp);
-      // if (matches) {
-      //   for (let option of matches) {
-      //     let opt = option.substring(1, option.length - 1).replace(/\\(["'])/g, "$1");
-      //     if (question === null) {
-      //       question = opt;
-      //     } else {
-      //       options.push(opt);
-      //     }
-      //   }
-      // }
-
-      //V3
-      // Build a regular expression that matches the standard double quote
-      const quotePattern = `\\${standardQuote}`;
-      const regexp = new RegExp(`${quotePattern}(?:[^${quotePattern}\\\\]|\\\\.)*${quotePattern}`, 'g');
-
-      const matches = cmdBody.match(regexp);
-      if (matches) {
-        for (let option of matches) {
-          // Remove the first and last characters (quotes)
-          let opt = option.substring(1, option.length - 1);
-
-          // For question and options, unescape quotes and double backslashes for user readability
-          let unescapedOpt = opt.replace(new RegExp(escapedQuotesPattern, 'g'), (match) => match[1])
-              .replace(/\\\\/g, "\\");
-          if (question === null) {
-            question = unescapedOpt;
           } else {
-            options.push(unescapedOpt);
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              //blocks: blocks,
+              text: `Usage:\n/${slackCommand} config read` +
+                  `\n${validWritePara}`
+              ,
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
           }
+
         }
       }
-    }
-    catch (e) {
-      let mRequestBody = {
-        token: context.botToken,
-        channel: channel,
-        user: userId,
-        //blocks: blocks,
-        text: `\`${fullCmd}\`\n`+stri18n(userLang,'err_invalid_command')
-        ,
-      };
-      await postChat(body.response_url,'ephemeral',mRequestBody);
-      return;
-    }
 
+      //V1
+      // const lastSep = cmdBody.split('').pop();
+      // const firstSep = cmdBody.charAt(0);
 
-    if(options.length > gSlackLimitChoices) {
+      if (isLimited && null === limit) {
+        limit = 1;
+      }
+
       try {
+        //V1
+        // const regexp = new RegExp(firstSep+'[^'+firstSep+'\\\\]*(?:\\\\[\S\s][^'+lastSep+'\\\\]*)*'+lastSep, 'g');
+        // for (let option of cmdBody.match(regexp)) {
+        //   let opt = option.substring(1, option.length - 1);
+        //   if (question === null) {
+        //     question = opt;
+        //   } else {
+        //     options.push(opt);
+        //   }
+        // }
+
+        //V2
+        // const regexp = new RegExp(`${firstSep}(?:[^${firstSep}\\\\]|\\\\.)*${lastSep}`, 'g');
+        // const matches = cmdBody.match(regexp);
+        // if (matches) {
+        //   for (let option of matches) {
+        //     let opt = option.substring(1, option.length - 1).replace(/\\(["'])/g, "$1");
+        //     if (question === null) {
+        //       question = opt;
+        //     } else {
+        //       options.push(opt);
+        //     }
+        //   }
+        // }
+
+        //V3
+        // Build a regular expression that matches the standard double quote
+        const quotePattern = `\\${standardQuote}`;
+        const regexp = new RegExp(`${quotePattern}(?:[^${quotePattern}\\\\]|\\\\.)*${quotePattern}`, 'g');
+
+        const matches = cmdBody.match(regexp);
+        if (matches) {
+          for (let option of matches) {
+            // Remove the first and last characters (quotes)
+            let opt = option.substring(1, option.length - 1);
+
+            // For question and options, unescape quotes and double backslashes for user readability
+            let unescapedOpt = opt.replace(new RegExp(escapedQuotesPattern, 'g'), (match) => match[1])
+                .replace(/\\\\/g, "\\");
+            if (question === null) {
+              question = unescapedOpt;
+            } else {
+              options.push(unescapedOpt);
+            }
+          }
+        }
+      } catch (e) {
         let mRequestBody = {
           token: context.botToken,
           channel: channel,
           user: userId,
-          text: `\`\`\`${fullCmd}\`\`\`\n`+parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
+          //blocks: blocks,
+          text: `\`${fullCmd}\`\n` + stri18n(userLang, 'err_invalid_command')
+          ,
         };
         await postChat(body.response_url, 'ephemeral', mRequestBody);
-      } catch (e) {
-        //not able to dm user
-        console.log(e);
+        return;
       }
-      return;
-    }
-
-    let blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, fullCmd,"cmd",null,null));
 
 
-    if (null === blocks) {
-      let mRequestBody = {
-        token: context.botToken,
-        channel: channel,
-        user: userId,
-        //blocks: blocks,
-        text: `\`${fullCmd}\`\n`+stri18n(userLang,'err_invalid_command')
-      };
-      await postChat(body.response_url,'ephemeral',mRequestBody);
-      return;
-    }
+      if (options.length > gSlackLimitChoices) {
+        try {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            user: userId,
+            text: `\`\`\`${fullCmd}\`\`\`\n` + parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices}),
+          };
+          await postChat(body.response_url, 'ephemeral', mRequestBody);
+        } catch (e) {
+          //not able to dm user
+          console.log(e);
+        }
+        return;
+      }
 
-    let mRequestBody = {
-      token: context.botToken,
-      channel: channel,
-      blocks: blocks.blocks,
-      text: `Poll : ${question}`,
-    };
-    const postRes = await postChat(body.response_url,'post',mRequestBody);
-    if(postRes.status === false) {
-      try {
-        logger.debug("Block count:"+blocks?.blocks?.length);
-        console.log(postRes);
+      let blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, fullCmd, "cmd", null, null));
+
+
+      if (null === blocks) {
         let mRequestBody = {
           token: context.botToken,
           channel: channel,
           user: userId,
-          text: `Error while create poll: \`${fullCmd}\` \nERROR:${postRes.message}`
+          //blocks: blocks,
+          text: `\`${fullCmd}\`\n` + stri18n(userLang, 'err_invalid_command')
         };
         await postChat(body.response_url, 'ephemeral', mRequestBody);
-      } catch (e) {
-        //not able to dm user
-        console.log(e);
+        return;
       }
-    }
 
+      let mRequestBody = {
+        token: context.botToken,
+        channel: channel,
+        blocks: blocks.blocks,
+        text: `Poll : ${question}`,
+      };
+      const postRes = await postChat(body.response_url, 'post', mRequestBody);
+      if (postRes.status === false) {
+        try {
+          logger.debug("Block count:" + blocks?.blocks?.length);
+          console.log(postRes);
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            user: userId,
+            text: `Error while create poll: \`${fullCmd}\` \nERROR:${postRes.message}`
+          };
+          await postChat(body.response_url, 'ephemeral', mRequestBody);
+        } catch (e) {
+          //not able to dm user
+          console.log(e);
+        }
+      }
+
+    }
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in /command processing :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
   }
 });
 
@@ -2897,125 +2948,268 @@ app.action('btn_del_choice', async ({ action, ack, body, client, context }) => {
 // });
 
 app.action('btn_vote', async ({ action, ack, body, context }) => {
-  await ack();
-  let menuAtIndex = 0;
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+  try {
+    await ack();
+    let menuAtIndex = 0;
+    const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
 
-  if (
-    !body
-    || !action
-    || !body.user
-    || !body.user.id
-    || !body.message
-    || !body.message.blocks
-    || !body.message.ts
-    || !body.channel
-    || !body.channel.id
-  ) {
-    logger.info('error');
-    return;
-  }
-  const user_id = body.user.id;
-  const message = body.message;
-  let blocks = message.blocks;
-
-  const channel = body.channel.id;
-
-  let value = JSON.parse(action.value);
-
-  let poll_id = null;
-  if(value.hasOwnProperty('poll_id'))
-    poll_id = value.poll_id;
-
-  let userLang = null;
-  if(value.hasOwnProperty('user_lang'))
-    if(value.user_lang!=="" && value.user_lang != null)
-      userLang = value.user_lang;
-
-  let isAnonymous = false;
-  if(value.hasOwnProperty('anonymous'))
-    if(value.anonymous!=="" && value.anonymous != null)
-      isAnonymous = value.anonymous;
-
-  if(userLang==null)
-  {
-    userLang= gAppLang;
-    if(teamConfig.hasOwnProperty("app_lang")) userLang = teamConfig.app_lang;
-  }
-
-  let isMenuAtTheEnd = gIsMenuAtTheEnd;
-  if(value.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = value.menu_at_the_end;
-  else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
-
-  let isCompactUI = gIsCompactUI;
-  if(value.hasOwnProperty("compact_ui")) isCompactUI = value.compact_ui;
-  else if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
-
-  let isShowDivider = gIsShowDivider;
-  if(value.hasOwnProperty("show_divider")) isShowDivider = value.show_divider;
-  else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
-
-
-  if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
-
-  if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
-    mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
-  }
-
-  let release = null;
-  let countTry = 0;
-  do {
-    ++countTry;
-
-    try {
-      release = await mutexes[`${message.team}/${channel}/${message.ts}`].acquire();
-    } catch (e) {
-      logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+    if (
+        !body
+        || !action
+        || !body.user
+        || !body.user.id
+        || !body.message
+        || !body.message.blocks
+        || !body.message.ts
+        || !body.channel
+        || !body.channel.id
+    ) {
+      logger.info('error');
+      return;
     }
-  } while (!release && countTry < 3);
+    const user_id = body.user.id;
+    const message = body.message;
+    let blocks = message.blocks;
 
-  if (release) {
-    let removeVote = false;
-    try {
+    const channel = body.channel.id;
 
-      let isClosed = false
+    let value = JSON.parse(action.value);
+
+    let poll_id = null;
+    if (value.hasOwnProperty('poll_id'))
+      poll_id = value.poll_id;
+
+    let userLang = null;
+    if (value.hasOwnProperty('user_lang'))
+      if (value.user_lang !== "" && value.user_lang != null)
+        userLang = value.user_lang;
+
+    let isAnonymous = false;
+    if (value.hasOwnProperty('anonymous'))
+      if (value.anonymous !== "" && value.anonymous != null)
+        isAnonymous = value.anonymous;
+
+    if (userLang == null) {
+      userLang = gAppLang;
+      if (teamConfig.hasOwnProperty("app_lang")) userLang = teamConfig.app_lang;
+    }
+
+    let isMenuAtTheEnd = gIsMenuAtTheEnd;
+    if (value.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = value.menu_at_the_end;
+    else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+
+    let isCompactUI = gIsCompactUI;
+    if (value.hasOwnProperty("compact_ui")) isCompactUI = value.compact_ui;
+    else if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+
+    let isShowDivider = gIsShowDivider;
+    if (value.hasOwnProperty("show_divider")) isShowDivider = value.show_divider;
+    else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
+
+
+    if (isMenuAtTheEnd) menuAtIndex = body.message.blocks.length - 1;
+
+    if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
+      mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
+    }
+
+    let release = null;
+    let countTry = 0;
+    do {
+      ++countTry;
+
       try {
-        const data = await closedCol.findOne({ channel, ts: message.ts });
-        isClosed = data !== null && data.closed;
-      } catch {}
+        release = await mutexes[`${message.team}/${channel}/${message.ts}`].acquire();
+      } catch (e) {
+        logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+      }
+    } while (!release && countTry < 3);
 
-      if (isClosed) {
-        let mRequestBody = {
-          token: context.botToken,
+    if (release) {
+      let removeVote = false;
+      try {
+
+        let isClosed = false
+        try {
+          const data = await closedCol.findOne({channel, ts: message.ts});
+          isClosed = data !== null && data.closed;
+        } catch {
+        }
+
+        if (isClosed) {
+          let mRequestBody = {
+            token: context.botToken,
             channel: body.channel.id,
             user: body.user.id,
             attachments: [],
-            text: stri18n(userLang,'err_change_vote_poll_closed'),
-        };
-        await postChat(body.response_url,'ephemeral',mRequestBody);
+            text: stri18n(userLang, 'err_change_vote_poll_closed'),
+          };
+          await postChat(body.response_url, 'ephemeral', mRequestBody);
           return;
-      }
+        }
 
-      let poll = null;
-      const data = await votesCol.findOne({ channel: channel, ts: message.ts });
-      if (data === null) {
-        await votesCol.insertOne({
-          team: message.team,
-          channel,
-          ts: message.ts,
-          poll_id: poll_id,
-          votes: {},
-        });
-        poll = {};
-        for (const b of blocks) {
-          if (
-            b.hasOwnProperty('accessory')
-            && b.accessory.hasOwnProperty('value')
-          ) {
-            const val = JSON.parse(b.accessory.value);
-            poll[val.id] = val.voters ? val.voters : [];
+        let poll = null;
+        const data = await votesCol.findOne({channel: channel, ts: message.ts});
+        if (data === null) {
+          await votesCol.insertOne({
+            team: message.team,
+            channel,
+            ts: message.ts,
+            poll_id: poll_id,
+            votes: {},
+          });
+          poll = {};
+          for (const b of blocks) {
+            if (
+                b.hasOwnProperty('accessory')
+                && b.accessory.hasOwnProperty('value')
+            ) {
+              const val = JSON.parse(b.accessory.value);
+              poll[val.id] = val.voters ? val.voters : [];
+            }
+          }
+          await votesCol.updateOne({
+            channel,
+            ts: message.ts,
+          }, {
+            $set: {
+              votes: poll,
+            }
+          });
+        } else {
+          poll = data.votes;
+        }
+
+        //if not exist that mean this choice just add to poll
+        if (!poll.hasOwnProperty(value.id)) {
+          //logger.info("Vote array not found creating value.id="+value.id);
+          poll[value.id] = [];
+        }
+
+        const isHidden = await getInfos(
+            'hidden',
+            blocks,
+            {
+              team: message.team,
+              channel,
+              ts: message.ts,
+            },
+        )
+
+        let button_id = 3 + (value.id * 2);
+        let context_id = 3 + (value.id * 2) + 1;
+        let blockBtn = blocks[button_id];
+        let block = blocks[context_id];
+        let voters = value.voters ? value.voters : [];
+
+
+        if (poll[value.id].includes(user_id)) {
+          removeVote = true;
+        }
+
+        if (value.limited && value.limit) {
+          let voteCount = 0;
+          if (0 !== Object.keys(poll).length) {
+            for (const p in poll) {
+              if (poll[p].includes(user_id)) {
+                ++voteCount;
+              }
+            }
+          }
+
+          if (removeVote) {
+            voteCount -= 1;
+          }
+
+          if (voteCount >= value.limit) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: body.user.id,
+              attachments: [],
+              text: parameterizedString(stri18n(userLang, 'err_vote_over_limit'), {limit: value.limit}),
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
           }
         }
+
+        if (removeVote) {
+          poll[value.id] = poll[value.id].filter(voter_id => voter_id !== user_id);
+        } else {
+          poll[value.id].push(user_id);
+        }
+
+        for (const i in blocks) {
+          let b = blocks[i];
+          if (
+              b.hasOwnProperty('accessory')
+              && b.accessory.hasOwnProperty('value')
+          ) {
+            let val = JSON.parse(b.accessory.value);
+            if (!val.hasOwnProperty('voters')) {
+              val.voters = [];
+            }
+
+            if (!poll.hasOwnProperty(val.id)) {
+              poll[val.id] = [];
+            }
+
+            val.voters = poll[val.id];
+            let newVoters = '';
+
+            if (isHidden) {
+              newVoters = stri18n(userLang, 'info_wait_reveal');
+            } else if (poll[val.id].length === 0) {
+              newVoters = stri18n(userLang, 'info_no_vote');
+            } else {
+              newVoters = '';
+              for (const voter of poll[val.id]) {
+                if (!val.anonymous) {
+                  newVoters += `<@${voter}> `;
+                }
+              }
+
+              newVoters += poll[val.id].length + ' ';
+              if (poll[val.id].length === 1) {
+                newVoters += 'vote';
+              } else {
+                newVoters += 'votes';
+              }
+            }
+
+            blocks[i].accessory.value = JSON.stringify(val);
+            if (!isCompactUI) {
+              const nextI = '' + (parseInt(i) + 1);
+              if (blocks[nextI].hasOwnProperty('elements')) {
+                blocks[nextI].elements[0].text = newVoters;
+              }
+            } else {
+              let choiceNL = blocks[i].text.text.indexOf('\n');
+              if (choiceNL === -1) choiceNL = blocks[i].text.text.length;
+              const choiceText = blocks[i].text.text.substring(0, choiceNL);
+              blocks[i].text.text = `${choiceText}\n${newVoters}`;
+            }
+          }
+        }
+
+        const infosIndex = blocks.findIndex(el => el.type === 'context' && el.elements)
+        blocks[infosIndex].elements = await buildInfosBlocks(
+            blocks,
+            {
+              team: message.team,
+              channel,
+              ts: message.ts,
+            },
+            userLang
+        );
+        blocks[menuAtIndex].accessory.option_groups[0].options =
+            await buildMenu(blocks, {
+              team: message.team,
+              channel,
+              ts: message.ts,
+            }, userLang, isMenuAtTheEnd);
+
         await votesCol.updateOne({
           channel,
           ts: message.ts,
@@ -3024,435 +3218,312 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
             votes: poll,
           }
         });
-      } else {
-        poll = data.votes;
-      }
 
-      //if not exist that mean this choice just add to poll
-      if(!poll.hasOwnProperty(value.id))
-      {
-        //logger.info("Vote array not found creating value.id="+value.id);
-        poll[value.id] = [];
-      }
-
-      const isHidden = await getInfos(
-        'hidden',
-        blocks,
-        {
-          team: message.team,
-          channel,
+        let mRequestBody = {
+          token: context.botToken,
+          channel: channel,
           ts: message.ts,
-        },
-      )
+          blocks: blocks,
+          text: message.text,
+        };
+        await postChat(body.response_url, 'update', mRequestBody);
 
-      let button_id = 3 + (value.id * 2);
-      let context_id = 3 + (value.id * 2) + 1;
-      let blockBtn = blocks[button_id];
-      let block = blocks[context_id];
-      let voters = value.voters ? value.voters : [];
-
-
-      if (poll[value.id].includes(user_id)) {
-        removeVote = true;
-      }
-
-      if (value.limited && value.limit) {
-        let voteCount = 0;
-        if (0 !== Object.keys(poll).length) {
-          for (const p in poll) {
-            if (poll[p].includes(user_id)) {
-              ++voteCount;
-            }
-          }
-        }
-
-        if (removeVote) {
-          voteCount -= 1;
-        }
-
-        if (voteCount >= value.limit) {
+        if (isAnonymous) {
+          let mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_vote'), {choice: ""});
+          if (removeVote) mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_unvote'), {choice: ""});
           let mRequestBody = {
             token: context.botToken,
-            channel: channel,
+            channel: body.channel.id,
             user: body.user.id,
             attachments: [],
-            text : parameterizedString(stri18n(userLang,'err_vote_over_limit'),{limit:value.limit}),
+            text: mesStr
           };
-          await postChat(body.response_url,'ephemeral',mRequestBody);
-          return;
+          await postChat(body.response_url, 'ephemeral', mRequestBody);
         }
-      }
 
-      if (removeVote) {
-        poll[value.id] = poll[value.id].filter(voter_id => voter_id !== user_id);
-      } else {
-        poll[value.id].push(user_id);
-      }
-
-      for (const i in blocks) {
-        let b = blocks[i];
-        if (
-          b.hasOwnProperty('accessory')
-          && b.accessory.hasOwnProperty('value')
-        ) {
-          let val = JSON.parse(b.accessory.value);
-          if (!val.hasOwnProperty('voters')) {
-            val.voters = [];
-          }
-
-          if (!poll.hasOwnProperty(val.id)) {
-            poll[val.id] = [];
-          }
-
-          val.voters = poll[val.id];
-          let newVoters = '';
-
-          if (isHidden) {
-            newVoters = stri18n(userLang,'info_wait_reveal');
-          } else if (poll[val.id].length === 0) {
-            newVoters = stri18n(userLang,'info_no_vote');
-          } else {
-            newVoters = '';
-            for (const voter of poll[val.id]) {
-              if (!val.anonymous) {
-                newVoters += `<@${voter}> `;
-              }
-            }
-
-            newVoters += poll[val.id].length +' ';
-            if (poll[val.id].length === 1) {
-              newVoters += 'vote';
-            } else {
-              newVoters += 'votes';
-            }
-          }
-
-          blocks[i].accessory.value = JSON.stringify(val);
-          if(!isCompactUI) {
-            const nextI = ''+(parseInt(i)+1);
-            if (blocks[nextI].hasOwnProperty('elements')) {
-              blocks[nextI].elements[0].text = newVoters;
-            }
-          }
-          else {
-            let choiceNL = blocks[i].text.text.indexOf('\n');
-            if(choiceNL===-1) choiceNL = blocks[i].text.text.length;
-            const choiceText = blocks[i].text.text.substring(0,choiceNL);
-            blocks[i].text.text = `${choiceText}\n${newVoters}`;
-          }
-        }
-      }
-
-      const infosIndex = blocks.findIndex(el => el.type === 'context' && el.elements)
-      blocks[infosIndex].elements = await buildInfosBlocks(
-        blocks,
-        {
-          team: message.team,
-          channel,
-          ts: message.ts,
-        },
-        userLang
-      );
-      blocks[menuAtIndex].accessory.option_groups[0].options =
-        await buildMenu(blocks, {
-          team: message.team,
-          channel,
-          ts: message.ts,
-        },userLang,isMenuAtTheEnd);
-
-      await votesCol.updateOne({
-        channel,
-        ts: message.ts,
-      }, {
-        $set: {
-          votes: poll,
-        }
-      });
-
-      let mRequestBody = {
-        token: context.botToken,
-        channel: channel,
-        ts: message.ts,
-        blocks: blocks,
-        text: message.text,
-      };
-      await postChat(body.response_url,'update',mRequestBody);
-
-      if(isAnonymous) {
-        let mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_vote'), {choice: ""});
-        if(removeVote) mesStr = parameterizedString(stri18n(userLang, 'info_anonymous_unvote'), {choice: ""});
+      } catch (e) {
+        logger.error(e);
         let mRequestBody = {
           token: context.botToken,
           channel: body.channel.id,
           user: body.user.id,
           attachments: [],
-          text: mesStr
+          text: stri18n(userLang, 'err_vote_exception'),
         };
-        await postChat(body.response_url,'ephemeral',mRequestBody);
-      }
+        await postChat(body.response_url, 'ephemeral', mRequestBody);
 
-    } catch (e) {
-      logger.error(e);
+      } finally {
+        release();
+      }
+    } else {
       let mRequestBody = {
         token: context.botToken,
         channel: body.channel.id,
         user: body.user.id,
         attachments: [],
-        text: stri18n(userLang,'err_vote_exception'),
+        text: stri18n(userLang, 'err_vote_exception'),
       };
-      await postChat(body.response_url,'ephemeral',mRequestBody);
+      await postChat(body.response_url, 'ephemeral', mRequestBody);
 
-    } finally {
-      release();
     }
-  } else {
-    let mRequestBody = {
-      token: context.botToken,
-      channel: body.channel.id,
-      user: body.user.id,
-      attachments: [],
-      text: stri18n(userLang,'err_vote_exception'),
-    };
-    await postChat(body.response_url,'ephemeral',mRequestBody);
-
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in btn_vote :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
   }
 });
 app.action('add_choice_after_post', async ({ ack, body, action, context,client }) => {
-  await ack();
-
-  if (
-    !body
-    || !action
-    || !body.user
-    || !body.user.id
-    || !body.message
-    || !body.message.blocks
-    || !body.message.ts
-    || !body.channel
-    || !body.channel.id
-  ) {
-    logger.info('error');
-    return;
-  }
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-  let appLang= gAppLang;
-  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-  const user_id = body.user.id;
-  const message = body.message;
-  let blocks = message.blocks;
-
-  const channel = body.channel.id;
-
-  const value = action.value.trim();
-
-  let poll_id = null;
-
-  let isMenuAtTheEnd = gIsMenuAtTheEnd;
-  if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
-  let isCompactUI = gIsCompactUI;
-  if(teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
-  let isShowDivider = gIsShowDivider;
-  if(teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
-  let isShowHelpLink = gIsShowHelpLink;
-  if(teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
-  let isShowCommandInfo = gIsShowCommandInfo;
-  if(teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
-  let isTrueAnonymous = gTrueAnonymous;
-  if(teamConfig.hasOwnProperty("true_anonymous")) isTrueAnonymous = teamConfig.true_anonymous;
-  let isShowNumberInChoice = gIsShowNumberInChoice;
-  if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
-  let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
-  if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
-
-  let userLang = appLang;
-
-  let isClosed = false
   try {
-    const data = await closedCol.findOne({ channel, ts: message.ts });
-    isClosed = data !== null && data.closed;
-  } catch {}
+    await ack();
 
-  if (isClosed) {
-    let mRequestBody = {
-      token: context.botToken,
-      channel: body.channel.id,
-      user: body.user.id,
-      attachments: [],
-      text: stri18n(userLang,'err_change_vote_poll_closed'),
-    };
-    await postChat(body.response_url,'ephemeral',mRequestBody);
-    return;
-  }
-
-  if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
-    mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
-  }
-  let release = null;
-  let countTry = 0;
-  do {
-    ++countTry;
-
-    try {
-      release = await mutexes[`${message.team}/${channel}/${message.ts}`].acquire();
-    } catch (e) {
-      logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+    if (
+        !body
+        || !action
+        || !body.user
+        || !body.user.id
+        || !body.message
+        || !body.message.blocks
+        || !body.message.ts
+        || !body.channel
+        || !body.channel.id
+    ) {
+      logger.info('error');
+      return;
     }
-  } while (!release && countTry < 3);
-  if (release) {
+    const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+    let appLang = gAppLang;
+    if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+    const user_id = body.user.id;
+    const message = body.message;
+    let blocks = message.blocks;
+
+    const channel = body.channel.id;
+
+    const value = action.value.trim();
+
+    let poll_id = null;
+
+    let isMenuAtTheEnd = gIsMenuAtTheEnd;
+    if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+    let isCompactUI = gIsCompactUI;
+    if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+    let isShowDivider = gIsShowDivider;
+    if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
+    let isShowHelpLink = gIsShowHelpLink;
+    if (teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
+    let isShowCommandInfo = gIsShowCommandInfo;
+    if (teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
+    let isTrueAnonymous = gTrueAnonymous;
+    if (teamConfig.hasOwnProperty("true_anonymous")) isTrueAnonymous = teamConfig.true_anonymous;
+    let isShowNumberInChoice = gIsShowNumberInChoice;
+    if (teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
+    let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
+    if (teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
+
+    let userLang = appLang;
+
+    let isClosed = false
     try {
-      //find next option id
-      let lastestOptionId = -1;
-      let lastestVoteBtnVal = [];
-      for (const idx in body.message.blocks) {
-        if (body.message.blocks[idx].hasOwnProperty('type') && body.message.blocks[idx].hasOwnProperty('accessory')) {
-          if (body.message.blocks[idx]['type'] === 'section') {
-            if (body.message.blocks[idx]['accessory']['type'] === 'button') {
-              if (body.message.blocks[idx]['accessory'].hasOwnProperty('action_id') &&
-                  body.message.blocks[idx]['accessory'].hasOwnProperty('value')
-              ) {
-                const voteBtnVal = JSON.parse(body.message.blocks[idx]['accessory']['value']);
-                const voteBtnId = parseInt(voteBtnVal['id']);
-                if (voteBtnId > lastestOptionId) {
-                  lastestOptionId = voteBtnId;
-                  lastestVoteBtnVal = voteBtnVal;
-                  if(voteBtnVal.hasOwnProperty('user_lang'))
-                    if(voteBtnVal['user_lang']!=="" && voteBtnVal['user_lang'] != null)
-                      userLang = voteBtnVal['user_lang'];
-                  if(voteBtnVal.hasOwnProperty("poll_id")) poll_id = voteBtnVal.poll_id;
-                  if(voteBtnVal.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = voteBtnVal.menu_at_the_end;
-                  if(voteBtnVal.hasOwnProperty("compact_ui")) isCompactUI = voteBtnVal.compact_ui;
-                  if(voteBtnVal.hasOwnProperty("show_divider")) isShowDivider = voteBtnVal.show_divider;
-                  if(voteBtnVal.hasOwnProperty("show_help_link")) isShowHelpLink = voteBtnVal.show_help_link;
-                  if(voteBtnVal.hasOwnProperty("show_command_info")) isShowCommandInfo = voteBtnVal.show_command_info;
-                  if(voteBtnVal.hasOwnProperty("true_anonymous")) isTrueAnonymous = voteBtnVal.true_anonymous;
-                  if(voteBtnVal.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = voteBtnVal.add_number_emoji_to_choice;
-                  if(voteBtnVal.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = voteBtnVal.add_number_emoji_to_choice_btn;
+      const data = await closedCol.findOne({channel, ts: message.ts});
+      isClosed = data !== null && data.closed;
+    } catch {
+    }
+
+    if (isClosed) {
+      let mRequestBody = {
+        token: context.botToken,
+        channel: body.channel.id,
+        user: body.user.id,
+        attachments: [],
+        text: stri18n(userLang, 'err_change_vote_poll_closed'),
+      };
+      await postChat(body.response_url, 'ephemeral', mRequestBody);
+      return;
+    }
+
+    if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
+      mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
+    }
+    let release = null;
+    let countTry = 0;
+    do {
+      ++countTry;
+
+      try {
+        release = await mutexes[`${message.team}/${channel}/${message.ts}`].acquire();
+      } catch (e) {
+        logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+      }
+    } while (!release && countTry < 3);
+    if (release) {
+      try {
+        //find next option id
+        let lastestOptionId = -1;
+        let lastestVoteBtnVal = [];
+        for (const idx in body.message.blocks) {
+          if (body.message.blocks[idx].hasOwnProperty('type') && body.message.blocks[idx].hasOwnProperty('accessory')) {
+            if (body.message.blocks[idx]['type'] === 'section') {
+              if (body.message.blocks[idx]['accessory']['type'] === 'button') {
+                if (body.message.blocks[idx]['accessory'].hasOwnProperty('action_id') &&
+                    body.message.blocks[idx]['accessory'].hasOwnProperty('value')
+                ) {
+                  const voteBtnVal = JSON.parse(body.message.blocks[idx]['accessory']['value']);
+                  const voteBtnId = parseInt(voteBtnVal['id']);
+                  if (voteBtnId > lastestOptionId) {
+                    lastestOptionId = voteBtnId;
+                    lastestVoteBtnVal = voteBtnVal;
+                    if (voteBtnVal.hasOwnProperty('user_lang'))
+                      if (voteBtnVal['user_lang'] !== "" && voteBtnVal['user_lang'] != null)
+                        userLang = voteBtnVal['user_lang'];
+                    if (voteBtnVal.hasOwnProperty("poll_id")) poll_id = voteBtnVal.poll_id;
+                    if (voteBtnVal.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = voteBtnVal.menu_at_the_end;
+                    if (voteBtnVal.hasOwnProperty("compact_ui")) isCompactUI = voteBtnVal.compact_ui;
+                    if (voteBtnVal.hasOwnProperty("show_divider")) isShowDivider = voteBtnVal.show_divider;
+                    if (voteBtnVal.hasOwnProperty("show_help_link")) isShowHelpLink = voteBtnVal.show_help_link;
+                    if (voteBtnVal.hasOwnProperty("show_command_info")) isShowCommandInfo = voteBtnVal.show_command_info;
+                    if (voteBtnVal.hasOwnProperty("true_anonymous")) isTrueAnonymous = voteBtnVal.true_anonymous;
+                    if (voteBtnVal.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = voteBtnVal.add_number_emoji_to_choice;
+                    if (voteBtnVal.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = voteBtnVal.add_number_emoji_to_choice_btn;
+
+                  }
+
+                  let thisChoice = body.message.blocks[idx]['text']['text'].trim();
+                  if (isShowNumberInChoice) {
+                    thisChoice = thisChoice.replace(slackNumToEmoji((voteBtnId + 1), userLang) + " ", '');
+                  }
+
+                  if (thisChoice === value) {
+                    let mRequestBody = {
+                      token: context.botToken,
+                      channel: body.channel.id,
+                      user: body.user.id,
+                      attachments: [],
+                      text: parameterizedString(stri18n(userLang, 'err_duplicate_add_choice'), {text: value}),
+                    };
+                    await postChat(body.response_url, 'ephemeral', mRequestBody);
+                    return;
+                  }
+
 
                 }
-
-                let thisChoice = body.message.blocks[idx]['text']['text'].trim();
-                if (isShowNumberInChoice) {
-                  thisChoice = thisChoice.replace(slackNumToEmoji((voteBtnId + 1),userLang) + " ", '');
-                }
-
-                if (thisChoice === value) {
-                  let mRequestBody = {
-                    token: context.botToken,
-                    channel: body.channel.id,
-                    user: body.user.id,
-                    attachments: [],
-                    text: parameterizedString(stri18n(userLang, 'err_duplicate_add_choice'), {text: value}),
-                  };
-                  await postChat(body.response_url, 'ephemeral', mRequestBody);
-                  return;
-                }
-
-
               }
             }
           }
         }
-      }
-      //update post
-      let newChoiceIndex = body.message.blocks.length-1;
-      if(isShowHelpLink||isShowCommandInfo) newChoiceIndex--;
-      if(isMenuAtTheEnd) newChoiceIndex--;
+        //update post
+        let newChoiceIndex = body.message.blocks.length - 1;
+        if (isShowHelpLink || isShowCommandInfo) newChoiceIndex--;
+        if (isMenuAtTheEnd) newChoiceIndex--;
 
-      const tempAddBlock = blocks[newChoiceIndex];
+        const tempAddBlock = blocks[newChoiceIndex];
 
-      lastestVoteBtnVal['id'] = (lastestOptionId + 1);
-      lastestVoteBtnVal['voters'] = [];
+        lastestVoteBtnVal['id'] = (lastestOptionId + 1);
+        lastestVoteBtnVal['voters'] = [];
 
-      if(lastestVoteBtnVal['id']+1> gSlackLimitChoices) {
-        try {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: body.channel.id,
-            user: body.user.id,
-            text: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
-          };
-          await postChat(body.response_url, 'ephemeral', mRequestBody);
-        } catch (e) {
-          //not able to dm user
-          console.log(e);
+        if (lastestVoteBtnVal['id'] + 1 > gSlackLimitChoices) {
+          try {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: body.channel.id,
+              user: body.user.id,
+              text: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices}),
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+          } catch (e) {
+            //not able to dm user
+            console.log(e);
+          }
+          return;
         }
-        return;
-      }
 
-      blocks.splice(newChoiceIndex, 1,buildVoteBlock(lastestVoteBtnVal, value, isCompactUI, isShowDivider, isShowNumberInChoice, isShowNumberInChoiceBtn));
+        blocks.splice(newChoiceIndex, 1, buildVoteBlock(lastestVoteBtnVal, value, isCompactUI, isShowDivider, isShowNumberInChoice, isShowNumberInChoiceBtn));
 
-      let divSpace = 0;
-      if(!isCompactUI) {
-        divSpace++;
-        let block = {
-          type: 'context',
-          elements: [
-            {
-              type: 'mrkdwn',
-              text: lastestVoteBtnVal['hidden'] ? stri18n(userLang,'info_wait_reveal') : stri18n(userLang,'info_no_vote'),
-            }
-          ],
+        let divSpace = 0;
+        if (!isCompactUI) {
+          divSpace++;
+          let block = {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: lastestVoteBtnVal['hidden'] ? stri18n(userLang, 'info_wait_reveal') : stri18n(userLang, 'info_no_vote'),
+              }
+            ],
+          };
+          blocks.splice(newChoiceIndex + divSpace, 0, block);
+        }
+        if (isShowDivider) {
+          divSpace++;
+          blocks.splice(newChoiceIndex + divSpace, 0, {
+            type: 'divider',
+          });
+        }
+
+        let mRequestBody2 = {
+          token: context.botToken,
+          channel: channel,
+          ts: message.ts,
+          blocks: blocks,
+          text: message.text
         };
-        blocks.splice(newChoiceIndex + divSpace,0,block);
+        await postChat(body.response_url, 'update', mRequestBody2);
+
+        //re-add add-choice section
+        blocks.splice(newChoiceIndex + 1 + divSpace, 0, tempAddBlock);
+
+        mRequestBody2 = {
+          token: context.botToken,
+          channel: channel,
+          ts: message.ts,
+          blocks: blocks,
+          text: message.text
+        };
+        await postChat(body.response_url, 'update', mRequestBody2);
+
+        //update polldata
+        if (poll_id != null) {
+          pollCol.updateOne(
+              {_id: new ObjectId(poll_id)},
+              {$push: {options: value}}
+          );
+        }
+
+      } catch (e) {
+        logger.error(e);
+        let mRequestBody = {
+          token: context.botToken,
+          channel: body.channel.id,
+          user: body.user.id,
+          attachments: [],
+          text: stri18n(userLang, 'err_add_choice_exception'),
+        };
+        await postChat(body.response_url, 'ephemeral', mRequestBody);
+      } finally {
+        release();
       }
-      if(isShowDivider) {
-        divSpace++;
-        blocks.splice(newChoiceIndex + divSpace, 0, {
-          type: 'divider',
-        });
-      }
-
-      let mRequestBody2 = {
-        token: context.botToken,
-        channel: channel,
-        ts: message.ts,
-        blocks: blocks,
-        text: message.text
-      };
-      await postChat(body.response_url, 'update', mRequestBody2);
-
-      //re-add add-choice section
-      blocks.splice(newChoiceIndex+1+divSpace, 0,tempAddBlock);
-
-      mRequestBody2 = {
-        token: context.botToken,
-        channel: channel,
-        ts: message.ts,
-        blocks: blocks,
-        text: message.text
-      };
-      await postChat(body.response_url, 'update', mRequestBody2);
-
-      //update polldata
-      if(poll_id!=null) {
-        pollCol.updateOne(
-            { _id: new ObjectId(poll_id) },
-            { $push: { options: value}  }
-        );
-      }
-
-    } catch (e) {
-      logger.error(e);
-      let mRequestBody = {
-        token: context.botToken,
-        channel: body.channel.id,
-        user: body.user.id,
-        attachments: [],
-        text: stri18n(userLang,'err_add_choice_exception'),
-      };
-      await postChat(body.response_url, 'ephemeral', mRequestBody);
-    } finally {
-      release();
     }
-  }
 
-  return;
+    return;
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in add_choice_after_post :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
+  }
 
 });
 
 app.shortcut('open_modal_new', async ({ shortcut, ack, context, client }) => {
-  await ack();
-  createModal(context, client, shortcut.trigger_id);
+  try {
+    await ack();
+    createModal(context, client, shortcut.trigger_id);
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in open_modal_new :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
+  }
 });
 
 async function createModal(context, client, trigger_id,response_url,channel) {
@@ -3878,528 +3949,498 @@ async function createModal(context, client, trigger_id,response_url,channel) {
 }
 
 app.action('modal_select_when', async ({ action, ack, body, client, context }) => {
-  await ack();
-
-  //console.log(action);
-  //console.log(body);
-  if (
-      !action
-      || !action.selected_option.value
-  ) {
-    return;
-  }
-
-  let isNow = true;
-  if(action.selected_option.value==="now") {
-    isNow = true;
-  } else {
-    isNow = false;
-  }
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-  let appLang= gAppLang;
-  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-  const privateMetadata = JSON.parse(body.view.private_metadata);
-  //privateMetadata.channel = action.selected_channel || action.selected_conversation;
-
-  //logger.debug(action);
-  //logger.debug("CH:"+privateMetadata.channel);
-  let isChFound = true;
-  let isChErr = false;
   try {
-    const result = await client.conversations.info({
-      token: context.botToken,
-      hash: body.view.hash,
-      channel: privateMetadata.channel
-    });
-  }
-  catch (e) {
-    if(e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted'))
-    {
-      isChFound = false;
-    }
-    else
-    {
-      //ignote it!
-      // logger.debug(`Error on client.conversations.info (CH:${privateMetadata?.channel}) :`+e.message);
-      // console.log(e);
-      // console.trace();
-      isChErr = true;
+    await ack();
+
+    //console.log(action);
+    //console.log(body);
+    if (
+        !action
+        || !action.selected_option.value
+    ) {
+      return;
     }
 
-  }
+    let isNow = true;
+    if (action.selected_option.value === "now") {
+      isNow = true;
+    } else {
+      isNow = false;
+    }
+    const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+    let appLang = gAppLang;
+    if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+    const privateMetadata = JSON.parse(body.view.private_metadata);
+    //privateMetadata.channel = action.selected_channel || action.selected_conversation;
 
-  let foundHintString = false;
-  let blockPointer = 0;
-  let blocks = body.view.blocks;
-  for (const i in blocks) {
-    let b = blocks[i];
-    if(b.hasOwnProperty('block_id')){
-      //test next element
-      let nextIndex = parseInt(i)+1;
-      if(blocks.length > nextIndex  ){
-        //logger.info("Block" +nextIndex +"IS:");
-        //logger.info(blocks[nextIndex]);
-        if(!foundHintString) {
-          if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type==="context"){
-            //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
-            if(isNow && privateMetadata?.response_url!== "" && privateMetadata?.response_url && isUseResponseUrl) {
+    //logger.debug(action);
+    //logger.debug("CH:"+privateMetadata.channel);
+    let isChFound = true;
+    let isChErr = false;
+    try {
+      const result = await client.conversations.info({
+        token: context.botToken,
+        hash: body.view.hash,
+        channel: privateMetadata.channel
+      });
+    } catch (e) {
+      if (e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted')) {
+        isChFound = false;
+      } else {
+        //ignote it!
+        // logger.debug(`Error on client.conversations.info (CH:${privateMetadata?.channel}) :`+e.message);
+        // console.log(e);
+        // console.trace();
+        isChErr = true;
+      }
+
+    }
+
+    let foundHintString = false;
+    let blockPointer = 0;
+    let blocks = body.view.blocks;
+    for (const i in blocks) {
+      let b = blocks[i];
+      if (b.hasOwnProperty('block_id')) {
+        //test next element
+        let nextIndex = parseInt(i) + 1;
+        if (blocks.length > nextIndex) {
+          //logger.info("Block" +nextIndex +"IS:");
+          //logger.info(blocks[nextIndex]);
+          if (!foundHintString) {
+            if (blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type === "context") {
+              //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
+              if (isNow && privateMetadata?.response_url !== "" && privateMetadata?.response_url && isUseResponseUrl) {
                 blocks[nextIndex].elements[0].text = stri18n(appLang, 'modal_ch_response_url_auto');
+              } else {
+                if (isChErr) {
+                  blocks[nextIndex].elements[0].text = stri18n(appLang, 'err_poll_ch_exception');
+                } else if (isChFound) {
+                  blocks[nextIndex].elements[0].text = stri18n(appLang, 'modal_bot_in_ch');
+                } else {
+                  blocks[nextIndex].elements[0].text = parameterizedString(stri18n(appLang, 'modal_bot_not_in_ch'), {
+                    slack_command: slackCommand,
+                    bot_name: botName
+                  })
+                }
+                //break;
+              }
+              foundHintString = true;
             }
-            else {
-              if(isChErr) {
-                blocks[nextIndex].elements[0].text = stri18n(appLang,'err_poll_ch_exception');
+          } else {
+            //find time select element
+            //console.log(blockPointer + ":" + b.block_id)
+            if (b.block_id === "task_when") {
+              //input date time should be in nexr box
+              //console.log("task_when FOUND!")
+              if (isNow) {
+                //delete date picker
+                //console.log("change back to now");
+                let beginBlocks = blocks.slice(0, blockPointer + 1);
+                let endBlocks = blocks.slice(blockPointer + 2);
+                blocks = beginBlocks.concat(endBlocks);
+              } else {
+                //add date picker
+                if (blocks[nextIndex]?.block_id === "task_when_ts") {
+                  //already exist
+                  //console.log("task_when_ts already exist");
+                } else {
+                  let beginBlocks = blocks.slice(0, blockPointer + 1);
+                  let endBlocks = blocks.slice(blockPointer + 1);
+
+                  const dateTimeInput = {
+                    "type": "input",
+                    "block_id": 'task_when_ts',
+                    "element": {
+                      "type": "datetimepicker",
+                      //"action_id": "datetimepicker-action"
+                    },
+                    // "hint": {
+                    //   "type": "plain_text",
+                    //   "text": "This is some hint text",
+                    //   "emoji": true
+                    // },
+                    "label": {
+                      "type": "plain_text",
+                      "text": stri18n(appLang, 'task_scheduled_post_on'),
+                      "emoji": true
+                    }
+                  };
+
+                  let tempModalBlockInput = JSON.parse(JSON.stringify(dateTimeInput));
+                  //tempModalBlockInput.block_id = 'TEST_choice_'+(blocks.length-8);
+
+                  beginBlocks.push(tempModalBlockInput);
+                  blocks = beginBlocks.concat(endBlocks);
+                }
               }
-              else if (isChFound) {
-                blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_bot_in_ch');
-              }
-              else {
-                blocks[nextIndex].elements[0].text = parameterizedString(stri18n(appLang,'modal_bot_not_in_ch'),{slack_command:slackCommand,bot_name:botName})
-              }
-              //break;
+
+
+              break;
             }
-            foundHintString = true;
           }
         }
-        else {
-          //find time select element
-          //console.log(blockPointer + ":" + b.block_id)
-          if(b.block_id==="task_when") {
-            //input date time should be in nexr box
-            //console.log("task_when FOUND!")
-            if(isNow) {
-              //delete date picker
-              //console.log("change back to now");
-              let beginBlocks = blocks.slice(0, blockPointer+1);
-              let endBlocks = blocks.slice(blockPointer+2);
-              blocks = beginBlocks.concat(endBlocks);
+      }
+      blockPointer++;
+    }
+    //logger.debug(blocks);
+    const view = {
+      type: body.view.type,
+      private_metadata: JSON.stringify(privateMetadata),
+      callback_id: 'modal_poll_submit',
+      title: body.view.title,
+      submit: body.view.submit,
+      close: body.view.close,
+      blocks: blocks,
+      external_id: body.view.id,
+    };
+
+    try {
+      const result = await client.views.update({
+        token: context.botToken,
+        hash: body.view.hash,
+        view: view,
+        view_id: body.view.id,
+      });
+    } catch (e) {
+      logger.debug("Error on modal_select_when (maybe user click too fast");
+    }
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in modal_select_when :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
+  }
+});
+
+app.action('modal_poll_channel', async ({ action, ack, body, client, context }) => {
+  try {
+    await ack();
+
+    if (
+        !action
+        && !action.selected_channel
+    ) {
+      return;
+    }
+    const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
+    let appLang = gAppLang;
+    if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+    const privateMetadata = JSON.parse(body.view.private_metadata);
+    privateMetadata.channel = action.selected_channel || action.selected_conversation;
+
+    //logger.debug(action);
+    //logger.debug("CH:"+privateMetadata.channel);
+    let isChFound = true;
+    let isChErr = false;
+    try {
+      const result = await client.conversations.info({
+        token: context.botToken,
+        hash: body.view.hash,
+        channel: privateMetadata.channel
+      });
+    } catch (e) {
+      if (e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted')) {
+        isChFound = false;
+      } else {
+        //ignote it!
+        // logger.debug(`Error on client.conversations.info (CH:${privateMetadata?.channel}) :`+e.message);
+        // console.log(e);
+        // console.trace();
+        isChErr = true;
+      }
+
+    }
+
+    let blocks = body.view.blocks;
+    for (const i in blocks) {
+      let b = blocks[i];
+      if (b.hasOwnProperty('block_id')) {
+        //test next element
+        let nextIndex = parseInt(i) + 1;
+        if (blocks.length > nextIndex) {
+          //logger.info("Block" +nextIndex +"IS:");
+          //logger.info(blocks[nextIndex]);
+          if (blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type === "context") {
+            //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
+            if (isChErr) {
+              blocks[nextIndex].elements[0].text = stri18n(appLang, 'err_poll_ch_exception');
+            } else if (isChFound) {
+              blocks[nextIndex].elements[0].text = stri18n(appLang, 'modal_bot_in_ch');
             } else {
-              //add date picker
-              if(blocks[nextIndex]?.block_id === "task_when_ts") {
-                //already exist
-                //console.log("task_when_ts already exist");
-              }
-              else {
-                let beginBlocks = blocks.slice(0, blockPointer+1);
-                let endBlocks = blocks.slice(blockPointer+1);
-
-                const dateTimeInput = {
-                  "type": "input",
-                  "block_id": 'task_when_ts',
-                  "element": {
-                    "type": "datetimepicker",
-                    //"action_id": "datetimepicker-action"
-                  },
-                  // "hint": {
-                  //   "type": "plain_text",
-                  //   "text": "This is some hint text",
-                  //   "emoji": true
-                  // },
-                  "label": {
-                    "type": "plain_text",
-                    "text": stri18n(appLang,'task_scheduled_post_on'),
-                    "emoji": true
-                  }
-                };
-
-                let tempModalBlockInput = JSON.parse(JSON.stringify(dateTimeInput));
-                //tempModalBlockInput.block_id = 'TEST_choice_'+(blocks.length-8);
-
-                beginBlocks.push(tempModalBlockInput);
-                blocks = beginBlocks.concat(endBlocks);
-              }
+              blocks[nextIndex].elements[0].text = parameterizedString(stri18n(appLang, 'modal_bot_not_in_ch'), {
+                slack_command: slackCommand,
+                bot_name: botName
+              })
             }
-
-
             break;
           }
         }
       }
     }
-    blockPointer++;
-  }
-  //logger.debug(blocks);
-  const view = {
-    type: body.view.type,
-    private_metadata: JSON.stringify(privateMetadata),
-    callback_id: 'modal_poll_submit',
-    title: body.view.title,
-    submit: body.view.submit,
-    close: body.view.close,
-    blocks: blocks,
-    external_id: body.view.id,
-  };
+    //logger.debug(blocks);
+    const view = {
+      type: body.view.type,
+      private_metadata: JSON.stringify(privateMetadata),
+      callback_id: 'modal_poll_submit',
+      title: body.view.title,
+      submit: body.view.submit,
+      close: body.view.close,
+      blocks: body.view.blocks,
+      external_id: body.view.id,
+    };
 
-  try {
-    const result = await client.views.update({
-      token: context.botToken,
-      hash: body.view.hash,
-      view: view,
-      view_id: body.view.id,
-    });
-  }
-  catch (e) {
-    logger.debug("Error on modal_poll_channel (maybe user click too fast");
-  }
-});
-
-app.action('modal_poll_channel', async ({ action, ack, body, client, context }) => {
-  await ack();
-
-  if (
-    !action
-    && !action.selected_channel
-  ) {
-    return;
-  }
-  const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-  let appLang= gAppLang;
-  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-  const privateMetadata = JSON.parse(body.view.private_metadata);
-  privateMetadata.channel = action.selected_channel || action.selected_conversation;
-
-  //logger.debug(action);
-  //logger.debug("CH:"+privateMetadata.channel);
-  let isChFound = true;
-  let isChErr = false;
-  try {
-    const result = await client.conversations.info({
-      token: context.botToken,
-      hash: body.view.hash,
-      channel: privateMetadata.channel
-     });
-  }
-  catch (e) {
-    if(e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted'))
-    {
-      isChFound = false;
+    try {
+      const result = await client.views.update({
+        token: context.botToken,
+        hash: body.view.hash,
+        view: view,
+        view_id: body.view.id,
+      });
+    } catch (e) {
+      logger.debug("Error on modal_poll_channel (maybe user click too fast");
     }
-    else
-    {
-      //ignote it!
-      // logger.debug(`Error on client.conversations.info (CH:${privateMetadata?.channel}) :`+e.message);
-      // console.log(e);
-      // console.trace();
-      isChErr = true;
-    }
-
-  }
-
-  let blocks = body.view.blocks;
-  for (const i in blocks) {
-    let b = blocks[i];
-    if(b.hasOwnProperty('block_id')){
-      //test next element
-      let nextIndex = parseInt(i)+1;
-      if(blocks.length > nextIndex  ){
-        //logger.info("Block" +nextIndex +"IS:");
-        //logger.info(blocks[nextIndex]);
-        if(blocks[nextIndex].hasOwnProperty('elements') && blocks[nextIndex].type==="context"){
-          //logger.info("TEST of" +nextIndex +"IS:"+ blocks[nextIndex].elements[0].text)
-          if(isChErr) {
-            blocks[nextIndex].elements[0].text = stri18n(appLang,'err_poll_ch_exception');
-          }
-          else if (isChFound) {
-            blocks[nextIndex].elements[0].text = stri18n(appLang,'modal_bot_in_ch');
-          }
-          else {
-            blocks[nextIndex].elements[0].text = parameterizedString(stri18n(appLang,'modal_bot_not_in_ch'),{slack_command:slackCommand,bot_name:botName})
-          }
-          break;
-        }
-      }
-    }
-  }
-  //logger.debug(blocks);
-  const view = {
-    type: body.view.type,
-    private_metadata: JSON.stringify(privateMetadata),
-    callback_id: 'modal_poll_submit',
-    title: body.view.title,
-    submit: body.view.submit,
-    close: body.view.close,
-    blocks: body.view.blocks,
-    external_id: body.view.id,
-  };
-
-  try {
-    const result = await client.views.update({
-      token: context.botToken,
-      hash: body.view.hash,
-      view: view,
-      view_id: body.view.id,
-    });
-  }
-  catch (e) {
-    logger.debug("Error on modal_poll_channel (maybe user click too fast");
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in modal_poll_channel :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
   }
 });
 
 app.action('modal_poll_options', async ({ action, ack, body, client, context }) => {
-  await ack();
-  return; //won't need to process anything anymore
-  if (
-    !body
-    || !body.view
-    || !body.view.private_metadata
-  ) {
-    return;
-  }
-
-  const privateMetadata = JSON.parse(body.view.private_metadata);
-
-  privateMetadata.anonymous = false;
-  privateMetadata.limited = false;
-  for (const option of action.selected_options) {
-    if ('anonymous' === option.value) {
-      privateMetadata.anonymous = true;
-    } else if ('limit' === option.value) {
-      privateMetadata.limited = true;
-    } else if ('hidden' === option.value) {
-      privateMetadata.hidden = true;
-    } else if ('user_add_choice' === option.value) {
-      privateMetadata.user_add_choice = true;
-    }
-  }
-
-  const view = {
-    type: body.view.type,
-    private_metadata: JSON.stringify(privateMetadata),
-    callback_id: 'modal_poll_submit',
-    title: body.view.title,
-    submit: body.view.submit,
-    close: body.view.close,
-    blocks: body.view.blocks,
-    external_id: body.view.id,
-  };
   try {
-    const result = await client.views.update({
-      token: context.botToken,
-      hash: body.view.hash,
-      view: view,
-      view_id: body.view.id,
-    });
-  }
-  catch (e){
-    //just ignore it will be process again on modal_poll_submit
-    logger.debug("Error on modal_poll_options (maybe user click too fast)");
+    await ack();
+    return; //won't need to process anything anymore
+    if (
+        !body
+        || !body.view
+        || !body.view.private_metadata
+    ) {
+      return;
+    }
+
+    const privateMetadata = JSON.parse(body.view.private_metadata);
+
+    privateMetadata.anonymous = false;
+    privateMetadata.limited = false;
+    for (const option of action.selected_options) {
+      if ('anonymous' === option.value) {
+        privateMetadata.anonymous = true;
+      } else if ('limit' === option.value) {
+        privateMetadata.limited = true;
+      } else if ('hidden' === option.value) {
+        privateMetadata.hidden = true;
+      } else if ('user_add_choice' === option.value) {
+        privateMetadata.user_add_choice = true;
+      }
+    }
+
+    const view = {
+      type: body.view.type,
+      private_metadata: JSON.stringify(privateMetadata),
+      callback_id: 'modal_poll_submit',
+      title: body.view.title,
+      submit: body.view.submit,
+      close: body.view.close,
+      blocks: body.view.blocks,
+      external_id: body.view.id,
+    };
+    try {
+      const result = await client.views.update({
+        token: context.botToken,
+        hash: body.view.hash,
+        view: view,
+        view_id: body.view.id,
+      });
+    } catch (e) {
+      //just ignore it will be process again on modal_poll_submit
+      logger.debug("Error on modal_poll_options (maybe user click too fast)");
+    }
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in modal_poll_options :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
   }
 });
 
 app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
 
-  if (
-    !view
-    || !body
-    || !view.blocks
-    || !view.state
-    || !view.private_metadata
-    || !body.user
-    || !body.user.id
-  ) {
-    return;
-  }
-  const teamOrEntId = getTeamOrEnterpriseId(context);
-  const teamConfig = await getTeamOverride(teamOrEntId);
-  let appLang= gAppLang;
-  let postDateTime = null;
-  if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-  const privateMetadata = JSON.parse(view.private_metadata);
-  const userId = body.user.id;
+  try {
+    if (
+        !view
+        || !body
+        || !view.blocks
+        || !view.state
+        || !view.private_metadata
+        || !body.user
+        || !body.user.id
+    ) {
+      return;
+    }
+    const teamOrEntId = getTeamOrEnterpriseId(context);
+    const teamConfig = await getTeamOverride(teamOrEntId);
+    let appLang = gAppLang;
+    let postDateTime = null;
+    if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+    const privateMetadata = JSON.parse(view.private_metadata);
+    const userId = body.user.id;
 
-  const state = view.state;
-  let question = null;
-  let userLang = appLang;
-  const options = [];
-  let limit = 1;
+    const state = view.state;
+    let question = null;
+    let userLang = appLang;
+    const options = [];
+    let limit = 1;
 
-  let isAck = false;
+    let isAck = false;
 
-  if (state.values) {
-    for (const optionName in state.values) {
-      const option = state.values[optionName][Object.keys(state.values[optionName])[0]];
-      if ('question' === optionName) {
-        question = option.value;
-      } else if ('user_lang' === optionName) {
-        if(langList.hasOwnProperty(option.selected_option.value)){
-          userLang = option.selected_option.value;
-        }
-      } else if ('limit' === optionName) {
-        limit = parseInt(option.value, 10);
-      } else if (optionName.startsWith('choice_')) {
-        options.push(option.value);
-      } else if ('options' === optionName) {
-        const checkedbox = state.values[optionName]['modal_poll_options']['selected_options'];
-        if (checkedbox) {
-          for (const each in checkedbox) {
-            const checkedValue = checkedbox[each].value;
-            if ('anonymous' === checkedValue) {
-              privateMetadata.anonymous = true;
-            } else if ('limit' === checkedValue) {
-              privateMetadata.limited = true;
-            } else if ('hidden' === checkedValue) {
-              privateMetadata.hidden = true;
-            } else if ('user_add_choice' === checkedValue) {
-              privateMetadata.user_add_choice = true;
+    if (state.values) {
+      for (const optionName in state.values) {
+        const option = state.values[optionName][Object.keys(state.values[optionName])[0]];
+        if ('question' === optionName) {
+          question = option.value;
+        } else if ('user_lang' === optionName) {
+          if (langList.hasOwnProperty(option.selected_option.value)) {
+            userLang = option.selected_option.value;
+          }
+        } else if ('limit' === optionName) {
+          limit = parseInt(option.value, 10);
+        } else if (optionName.startsWith('choice_')) {
+          options.push(option.value);
+        } else if ('options' === optionName) {
+          const checkedbox = state.values[optionName]['modal_poll_options']['selected_options'];
+          if (checkedbox) {
+            for (const each in checkedbox) {
+              const checkedValue = checkedbox[each].value;
+              if ('anonymous' === checkedValue) {
+                privateMetadata.anonymous = true;
+              } else if ('limit' === checkedValue) {
+                privateMetadata.limited = true;
+              } else if ('hidden' === checkedValue) {
+                privateMetadata.hidden = true;
+              } else if ('user_add_choice' === checkedValue) {
+                privateMetadata.user_add_choice = true;
+              }
             }
           }
+        } else if ('task_when_ts' === optionName) {
+          postDateTime = option.selected_date_time;
+          //console.log(option);
         }
-      } else if ('task_when_ts' === optionName) {
-        postDateTime = option.selected_date_time;
-        //console.log(option);
       }
     }
-  }
 
-  if(isNaN(limit)) limit = 1;
-  privateMetadata.user_lang = userLang;
-  const isAnonymous = privateMetadata.anonymous;
-  const isLimited = privateMetadata.limited;
-  const isHidden = privateMetadata.hidden;
-  const channel = privateMetadata.channel;
-  const isAllowUserAddChoice = privateMetadata.user_add_choice;
-  const response_url = privateMetadata.response_url;
+    if (isNaN(limit)) limit = 1;
+    privateMetadata.user_lang = userLang;
+    const isAnonymous = privateMetadata.anonymous;
+    const isLimited = privateMetadata.limited;
+    const isHidden = privateMetadata.hidden;
+    const channel = privateMetadata.channel;
+    const isAllowUserAddChoice = privateMetadata.user_add_choice;
+    const response_url = privateMetadata.response_url;
 
 
-  if(!isUseResponseUrl || !response_url || response_url === "" || postDateTime!==null) {
-    try {
-      const result = await client.conversations.info({
-        token: context.botToken,
-        channel: channel
-      });
-    }
-    catch (e) {
-      if(e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted'))
-      {
-        await ack({
-          response_action: 'errors',
-          errors: {
-            task_when: parameterizedString(stri18n(appLang,'err_bot_not_in_ch'),{bot_name:botName}),
-          },
+    if (!isUseResponseUrl || !response_url || response_url === "" || postDateTime !== null) {
+      try {
+        const result = await client.conversations.info({
+          token: context.botToken,
+          channel: channel
         });
-        return;
+      } catch (e) {
+        if (e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted')) {
+          await ack({
+            response_action: 'errors',
+            errors: {
+              task_when: parameterizedString(stri18n(appLang, 'err_bot_not_in_ch'), {bot_name: botName}),
+            },
+          });
+          return;
+        } else {
+          //ignore it!
+          logger.debug(`Error on client.conversations.info (CH:${channel}) :` + e.message);
+          logger.debug(e.toString() + "\n" + e.stack);
+          console.log(e);
+          console.trace();
+        }
       }
-      else
-      {
-        //ignore it!
-        logger.debug(`Error on client.conversations.info (CH:${channel}) :`+e.message);
-        console.log(e);
-        console.trace();
-      }
+      //await ack();
     }
-    //await ack();
-  }
-  // logger.silly(body);
-  // logger.silly(context);
+    // logger.silly(body);
+    // logger.silly(context);
 
-  if (
-    !question
-    || 0 === options.length
-  ) {
-    await ack({
-      response_action: 'errors',
-      errors: {
-        question: stri18n(appLang,'err_please_check_input'),
-      },
-    });
-    return;
-  }
-
-  let cmd = "";
-  try {
-    cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang);
-  }
-  catch (e)
-  {
-    logger.error(e);
-
-    await ack({
-      response_action: 'errors',
-      errors: {
-        question: stri18n(appLang,'err_process_command'),
-      },
-    });
-
-    let mRequestBody = {
-      token: context.botToken,
-      channel: channel,
-      user: body.user.id,
-      attachments: [],
-      text: stri18n(userLang,'err_process_command'),
-    };
-    await postChat(response_url,'ephemeral',mRequestBody);
-    return;
-  }
-
-  let isMenuAtTheEnd = gIsMenuAtTheEnd;
-  let isCompactUI = gIsCompactUI;
-  let isShowDivider = gIsShowDivider;
-  let isShowHelpLink = gIsShowHelpLink;
-  let isShowCommandInfo = gIsShowCommandInfo;
-  let isTrueAnonymous = gTrueAnonymous;
-  let isShowNumberInChoice = gIsShowNumberInChoice;
-  let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
-  if(privateMetadata.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = privateMetadata.menu_at_the_end;
-  else if(teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
-  if(privateMetadata.hasOwnProperty("compact_ui")) isCompactUI = privateMetadata.compact_ui;
-  else if(teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
-  if(privateMetadata.hasOwnProperty("show_divider")) isShowDivider = privateMetadata.show_divider;
-  else if(teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
-  if(privateMetadata.hasOwnProperty("show_help_link")) isShowHelpLink = privateMetadata.show_help_link;
-  else if(teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
-  if(privateMetadata.hasOwnProperty("show_command_info")) isShowCommandInfo = privateMetadata.show_command_info;
-  else if(teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
-  if(privateMetadata.hasOwnProperty("true_anonymous")) isTrueAnonymous = privateMetadata.true_anonymous;
-  else if(teamConfig.hasOwnProperty("true_anonymous")) isTrueAnonymous = teamConfig.true_anonymous;
-  if(privateMetadata.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = privateMetadata.add_number_emoji_to_choice;
-  else if(teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
-  if(privateMetadata.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = privateMetadata.add_number_emoji_to_choice_btn;
-  else if(teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
-
-  let cmd_via;
-  if(response_url!==undefined && response_url!=="") cmd_via = "modal_auto"
-  else cmd_via = "modal_manual";
-
-  if(options.length > gSlackLimitChoices) {
-
-    await ack({
-      response_action: 'errors',
-      errors: {
-        question: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
-      },
-    });
-
-    try {
-      let mRequestBody = {
-        token: context.botToken,
-        channel: userId,
-        text: `\`\`\`${cmd}\`\`\`\n`+parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices:gSlackLimitChoices}),
-      };
-      await postChat("", 'post', mRequestBody);
-    } catch (e) {
-      //not able to dm user
-      console.log(e);
-    }
-
-    return;
-  }
-
-  const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via,null,null);
-  const blocks = pollView.blocks;
-  const pollID = pollView.poll_id;
-  if(postDateTime===null) {
-    let mRequestBody = {
-      token: context.botToken,
-      channel: channel,
-      blocks: blocks,
-      text: `Poll : ${question}`,
-    };
-    const postRes = await postChat(response_url,'post',mRequestBody);
-    //console.log(postRes);
-    if(postRes.status === false) {
+    if (
+        !question
+        || 0 === options.length
+    ) {
       await ack({
         response_action: 'errors',
         errors: {
-          question: `Error while create poll:${postRes.message}`,
+          question: stri18n(appLang, 'err_please_check_input'),
+        },
+      });
+      return;
+    }
+
+    let cmd = "";
+    try {
+      cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang);
+    } catch (e) {
+      logger.error(e);
+
+      await ack({
+        response_action: 'errors',
+        errors: {
+          question: stri18n(appLang, 'err_process_command'),
+        },
+      });
+
+      let mRequestBody = {
+        token: context.botToken,
+        channel: channel,
+        user: body.user.id,
+        attachments: [],
+        text: stri18n(userLang, 'err_process_command'),
+      };
+      await postChat(response_url, 'ephemeral', mRequestBody);
+      return;
+    }
+
+    let isMenuAtTheEnd = gIsMenuAtTheEnd;
+    let isCompactUI = gIsCompactUI;
+    let isShowDivider = gIsShowDivider;
+    let isShowHelpLink = gIsShowHelpLink;
+    let isShowCommandInfo = gIsShowCommandInfo;
+    let isTrueAnonymous = gTrueAnonymous;
+    let isShowNumberInChoice = gIsShowNumberInChoice;
+    let isShowNumberInChoiceBtn = gIsShowNumberInChoiceBtn;
+    if (privateMetadata.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = privateMetadata.menu_at_the_end;
+    else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+    if (privateMetadata.hasOwnProperty("compact_ui")) isCompactUI = privateMetadata.compact_ui;
+    else if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+    if (privateMetadata.hasOwnProperty("show_divider")) isShowDivider = privateMetadata.show_divider;
+    else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
+    if (privateMetadata.hasOwnProperty("show_help_link")) isShowHelpLink = privateMetadata.show_help_link;
+    else if (teamConfig.hasOwnProperty("show_help_link")) isShowHelpLink = teamConfig.show_help_link;
+    if (privateMetadata.hasOwnProperty("show_command_info")) isShowCommandInfo = privateMetadata.show_command_info;
+    else if (teamConfig.hasOwnProperty("show_command_info")) isShowCommandInfo = teamConfig.show_command_info;
+    if (privateMetadata.hasOwnProperty("true_anonymous")) isTrueAnonymous = privateMetadata.true_anonymous;
+    else if (teamConfig.hasOwnProperty("true_anonymous")) isTrueAnonymous = teamConfig.true_anonymous;
+    if (privateMetadata.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = privateMetadata.add_number_emoji_to_choice;
+    else if (teamConfig.hasOwnProperty("add_number_emoji_to_choice")) isShowNumberInChoice = teamConfig.add_number_emoji_to_choice;
+    if (privateMetadata.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = privateMetadata.add_number_emoji_to_choice_btn;
+    else if (teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
+
+    let cmd_via;
+    if (response_url !== undefined && response_url !== "") cmd_via = "modal_auto"
+    else cmd_via = "modal_manual";
+
+    if (options.length > gSlackLimitChoices) {
+
+      await ack({
+        response_action: 'errors',
+        errors: {
+          question: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices}),
         },
       });
 
@@ -4407,97 +4448,144 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         let mRequestBody = {
           token: context.botToken,
           channel: userId,
-          text: `Error while create poll: \`\`\`${cmd}\`\`\` \nERROR:${postRes.message}`
+          text: `\`\`\`${cmd}\`\`\`\n` + parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices}),
         };
-        await postChat(response_url, 'post', mRequestBody);
+        await postChat("", 'post', mRequestBody);
       } catch (e) {
         //not able to dm user
-        console.log("not able to dm user");
-        console.log(postRes);
-        console.trace();
         console.log(e);
       }
 
       return;
     }
-  } else {
-    //schedule
-    //console.log(postDateTime);
-    try {
 
-      let posttimestamp = parseInt(postDateTime, 10);
-      const schTs = new Date(posttimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
-      let isoStr = schTs.toISOString();
-      //console.log(isoStr);
-      //console.log(schTs);;
-      const dataToInsert = {
-        poll_id: new ObjectId(pollID),
-        next_ts: schTs,
-        created_ts: new Date(),
-        created_user_id: userId,
-        run_max: 1,
-        is_done: false,
-        is_enable: true,
-        poll_ch: null,
-        cron_string: null,
-      };
-
-      // Insert the data into scheduleCol
-      //await scheduleCol.insertOne(dataToInsert);
-      await scheduleCol.replaceOne(
-          {poll_id: new ObjectId(pollID)}, // Filter document with the same poll_id
-          dataToInsert, // New document to be inserted
-          {upsert: true} // Option to insert a new document if no matching document is found
-      );
-      let actString = "```"+cmd+"```\n"+parameterizedString(stri18n(userLang, 'task_scheduled'), {
-        poll_id: pollID,
-        ts: isoStr,
-        poll_ch: null,
-        cron_string: null,
-        run_max: 1
-      });
-
-      if(!isAck) await ack();
-      isAck=true;
-
+    const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd, cmd_via, null, null);
+    const blocks = pollView.blocks;
+    const pollID = pollView.poll_id;
+    if (postDateTime === null) {
       let mRequestBody = {
         token: context.botToken,
         channel: channel,
-        user: body.user.id,
-        text: actString
-        ,
+        blocks: blocks,
+        text: `Poll : ${question}`,
       };
-      const postRes = await postChat(response_url, 'ephemeral', mRequestBody);
-      logger.verbose(`[Schedule] New task create from UI (PollID:${pollID})`);
-    }
-    catch (e) {
+      const postRes = await postChat(response_url, 'post', mRequestBody);
+      //console.log(postRes);
+      if (postRes.status === false) {
+        await ack({
+          response_action: 'errors',
+          errors: {
+            question: `Error while create poll:${postRes.message}`,
+          },
+        });
 
-      await ack({
-        response_action: 'errors',
-        errors: {
-          task_when: `[Schedule] Scheduled Error`,
-        },
-      });
+        try {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: userId,
+            text: `Error while create poll: \`\`\`${cmd}\`\`\` \nERROR:${postRes.message}`
+          };
+          await postChat(response_url, 'post', mRequestBody);
+        } catch (e) {
+          //not able to dm user
+          console.log("not able to dm user");
+          console.log(postRes);
+          console.trace();
+          console.log(e);
+        }
 
-      logger.error(`[Schedule] New task create from UI (PollID:${pollID}) ERROR`);
-      logger.error(e);
-      let mRequestBody = {
-        token: context.botToken,
-        channel: channel,
-        user: userId,
-        text: "[Schedule] Scheduled Error"
-      };
-      await postChat(response_url, 'ephemeral', mRequestBody);
-      return;
+        return;
+      }
+    } else {
+      //schedule
+      //console.log(postDateTime);
+      try {
+
+        let posttimestamp = parseInt(postDateTime, 10);
+        const schTs = new Date(posttimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
+        let isoStr = schTs.toISOString();
+        //console.log(isoStr);
+        //console.log(schTs);;
+        const dataToInsert = {
+          poll_id: new ObjectId(pollID),
+          next_ts: schTs,
+          created_ts: new Date(),
+          created_user_id: userId,
+          run_max: 1,
+          is_done: false,
+          is_enable: true,
+          poll_ch: null,
+          cron_string: null,
+        };
+
+        // Insert the data into scheduleCol
+        //await scheduleCol.insertOne(dataToInsert);
+        await scheduleCol.replaceOne(
+            {poll_id: new ObjectId(pollID)}, // Filter document with the same poll_id
+            dataToInsert, // New document to be inserted
+            {upsert: true} // Option to insert a new document if no matching document is found
+        );
+        let actString = "```" + cmd + "```\n" + parameterizedString(stri18n(userLang, 'task_scheduled'), {
+          poll_id: pollID,
+          ts: isoStr,
+          poll_ch: null,
+          cron_string: null,
+          run_max: 1
+        });
+
+        if (!isAck) await ack();
+        isAck = true;
+
+        let mRequestBody = {
+          token: context.botToken,
+          channel: channel,
+          user: body.user.id,
+          text: actString
+          ,
+        };
+        const postRes = await postChat(response_url, 'ephemeral', mRequestBody);
+        logger.verbose(`[Schedule] New task create from UI (PollID:${pollID})`);
+      } catch (e) {
+
+        await ack({
+          response_action: 'errors',
+          errors: {
+            task_when: `[Schedule] Scheduled Error`,
+          },
+        });
+
+        logger.error(`[Schedule] New task create from UI (PollID:${pollID}) ERROR`);
+        logger.error(e);
+        let mRequestBody = {
+          token: context.botToken,
+          channel: channel,
+          user: userId,
+          text: "[Schedule] Scheduled Error"
+        };
+        await postChat(response_url, 'ephemeral', mRequestBody);
+        return;
+      }
     }
+    if (!isAck) await ack();
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in modal_poll_submit :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
   }
-  if(!isAck) await ack();
 });
 
 app.view('modal_delete_confirm', async ({ ack, body, view, context }) => {
-  await ack();
-  const privateMetadata = JSON.parse(view.private_metadata);
-  deletePollConfirm(body, context, privateMetadata);
+  try {
+    await ack();
+    const privateMetadata = JSON.parse(view.private_metadata);
+    deletePollConfirm(body, context, privateMetadata);
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in modal_delete_confirm :` + e.message);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
+  }
 });
 function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang) {
   let cmd = `/${slackCommand}`;
