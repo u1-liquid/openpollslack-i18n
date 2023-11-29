@@ -1972,6 +1972,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
               await postChat(body.response_url, 'ephemeral', mRequestBody);
 
               logger.verbose(`[Schedule] New schedule, Poll ID: ${schPollID}`);
+              logger.debug(`[Schedule] CMD: ${fullCmd}`);
               return;
 
             } else if (cmdMode === 'delete') {
