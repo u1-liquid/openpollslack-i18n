@@ -1,6 +1,7 @@
 {
   "port": 5000,
   "command": "poll",
+  "command2": "openpoll",
   "bot_name": "Open Poll Plus",
   "app_lang": "en",
   "app_lang_user_selectable": true,

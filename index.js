@@ -32,6 +32,7 @@ let langList = {};
 const port = config.get('port');
 const signing_secret = config.get('signing_secret');
 const slackCommand = config.get('command');
+const slackCommand2 = config.get('command2');
 const helpLink = config.get('help_link');
 const helpEmail = config.get('help_email');
 const supportUrl = config.get('support_url');
@@ -1267,7 +1268,15 @@ app.event('app_home_opened', async ({ event, client, context }) => {
 });
 
 app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, say, respond }) => {
+  await processCommand(ack, body, client, command, context, say, respond);
+});
 
+app.command(`/${slackCommand2}`, async ({ ack, body, client, command, context, say, respond }) => {
+  await processCommand(ack, body, client, command, context, say, respond);
+});
+
+
+async function processCommand(ack, body, client, command, context, say, respond) {
   try {
     const receivedTime = new Date().getTime();
     await ack();
@@ -1293,9 +1302,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     const fullCmd = `/${slackCommand} ${cmdBody}`
 
     const isHelp = cmdBody ? 'help' === cmdBody : false;
-
     const channel = (command && command.channel_id) ? command.channel_id : null;
-
     const userId = (command && command.user_id) ? command.user_id : null;
 
     const teamOrEntId = getTeamOrEnterpriseId(context);
@@ -2589,7 +2596,7 @@ app.command(`/${slackCommand}`, async ({ ack, body, client, command, context, sa
     console.log(e);
     console.trace();
   }
-});
+}
 
 const createModalBlockInput = (userLang)  => {
     return {
