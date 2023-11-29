@@ -4292,6 +4292,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     let question = null;
     let userLang = appLang;
     const options = [];
+    let elementToAlert = "task_when";
     let limit = 1;
 
     let isAck = false;
@@ -4309,6 +4310,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
           limit = parseInt(option.value, 10);
         } else if (optionName.startsWith('choice_')) {
           options.push(option.value);
+          elementToAlert = optionName;
         } else if ('options' === optionName) {
           const checkedbox = state.values[optionName]['modal_poll_options']['selected_options'];
           if (checkedbox) {
@@ -4335,12 +4337,13 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     }
 
     if(privateMetadata.channel===undefined || privateMetadata.channel==null) {
-      await ack({
+      let ackErr = {
         response_action: 'errors',
         errors: {
           task_when: parameterizedString(stri18n(appLang, 'err_para_missing'), {parameter: "Channel to post"}),
         },
-      });
+      };
+      await ack(ackErr);
       return;
     }
 
@@ -4450,12 +4453,13 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
 
     if (options.length > gSlackLimitChoices) {
 
-      await ack({
+      let ackErr = {
         response_action: 'errors',
         errors: {
-          question: parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices}),
         },
-      });
+      };
+      ackErr.errors[elementToAlert] = parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices});
+      await ack(ackErr);
 
       try {
         let mRequestBody = {
@@ -4485,12 +4489,13 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       const postRes = await postChat(response_url, 'post', mRequestBody);
       //console.log(postRes);
       if (postRes.status === false) {
-        await ack({
+        let ackErr = {
           response_action: 'errors',
           errors: {
-            question: `Error while create poll:${postRes.message}`,
           },
-        });
+        };
+        ackErr.errors[elementToAlert] = `Error while create poll:${postRes.message}`;
+        await ack(ackErr);
 
         try {
           let mRequestBody = {
