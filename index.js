@@ -920,343 +920,366 @@ const slackNumToEmoji = (seq,userLang) => {
   return outText;
 }
 
+function createHelpBlock(appLang) {
+  return [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Hello*, here is how to create a poll with OpenPoll+.",
+      },
+    },
+    {
+      type: "divider",
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Create poll",
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*From command*\nJust type `/"+slackCommand+"` where you type the message and press Enter without any options. A modal dialog will pop up and guide you to create one.\n\nIf you want to create one with single line of command, please add options, question and your choices. For both question and your choices please surround it with \"quotes\"",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*From shortcuts*\nOpen shortcuts and select \"Create Poll\"",
+      },
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Delete poll",
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Click Menu and select Delete at your poll.\nOnly the creator can delete a poll.",
+      },
+    },
+    {
+      type: "divider",
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Options",
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "The options are optionals settings to apply to the poll.\nDon't surround options with quotes.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Anonymous*\n`anonymous` inside command.\nThis option allow you to hide voters.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Limited choices*\n`limit x` inside command. Replace \"x\" by desired number.\nThis option limit maximum choice for each users. If \"2\", each user can only select 2 choices.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Hidden*\n`hidden` inside command.\nThis option hide the number of votes for each choice. You can reveal votes with a button at bottom of poll. Only the creator can reveal votes.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Allow choices from others*\n`add-choice` inside command.\nThis option allow other member to add more choice to this poll.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Schedule a poll*\n`on TIME_STAMP` inside command.\nReplace \"TIME_STAMP\" with Time stamp in ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ` ",
+      },
+    },
+    {
+      type: "divider",
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Examples",
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Simple poll*\nThis example will create a basic poll.",
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with `\\"` and escaped `\\ ` with `\\\\` ',
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: '(Supported double quote: '+getSupportDoubleQuoteToStr()+')',
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```"+"/"+slackCommand+" \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""+"```",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```"+"/"+slackCommand+" \"Please select \\\"HELLO\\\" ?\" \"HELLO\" \"HELlo\" \"helLo\" \"HE\\\"LL\\\"O\""+"```",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Anonymous poll*\nThis example will create anonymous poll.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```"+"/"+slackCommand+" anonymous \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""+"```",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Limited poll*\nThis example will create anonymous poll.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```"+"/"+slackCommand+" limit 2 \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""+"```",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Hidden poll*\nThis example will create hidden poll and allow you to reveal votes.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```"+"/"+slackCommand+" hidden \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""+"```",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Mixed options poll*\nThis example will create anonymous and limited poll.",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```"+"/"+slackCommand+" anonymous limit 2 \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""+"```",
+      },
+    },
+    // {
+    //   type: "section",
+    //   text: {
+    //     type: "mrkdwn",
+    //     text: "*Private messages*\nTo create poll in private messages, you need to invite the bot inside with `/invite` command.",
+    //   },
+    // },
+    {
+      type: "divider",
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Schedule and Recurring polling",
+        emoji: true,
+      },
+    },
+
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Create Simple Schedule poll*",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```/"+slackCommand+" on 2023-11-15T10:30:00+07:00 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"```",
+      },
+    },
+
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Create Advanced Schedule and Recurring poll*",
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]```",
+      },
+    },
+
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "- Bot MUST in the channel.\n" +
+            "- Only one schedule for each poll, reschedule will replace previous one.\n" +
+            "- `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`).\n" +
+            "  - To get Poll ID: go to exist poll > `Menu` > `Command Info.`.\n" +
+            "- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).\n" +
+            "- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).\n" +
+            "  - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.\n" +
+            "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC Timezone (with \"Double Quote\") here (eg. `\"30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
+            "- `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`"+gScheduleMaxRun+"` times), After Run Counter greater than this number; schedule will disable itself.\n" +
+            "\n" +
+            "NOTE: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n" +
+            "For more information please visit <"+helpLink+"|full document here>.",
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: "Example:\n"+
+            "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
+            "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"30 12 15 * *\" 12```\n" +
+            "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"30 12 15 * *\" 12```"
+      },
+    },
+
+    {
+      type: "divider",
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Config Open Poll for this Workspace",
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "```\n/" + slackCommand + " config```",
+      },
+    },
+    {
+      type: "divider",
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Tips",
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "*Private channel*\nTo create poll in private channels, please use `/"+slackCommand+"` command. If you using Shortcut or Schedule you need to invite the bot inside with `/invite` command.",
+      },
+    },
+    {
+      type: "divider",
+    },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: "Limitations",
+        emoji: true,
+      },
+    },
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "Slack have limitations and that include \"message length\". So you can't have more than 15 options per poll. You can create multiple polls if you want more options",
+      },
+    },
+    {
+        type: 'divider',
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: parameterizedString(stri18n(appLang, 'info_need_help'), {email: helpEmail, link: helpLink}),
+        //text: stri18n(appLang,'info_need_help')
+      },
+    },
+  ];
+}
 app.event('app_home_opened', async ({ event, client, context }) => {
   try {
+    const teamOrEntId = getTeamOrEnterpriseId(context);
+    const teamConfig = await getTeamOverride(teamOrEntId);
+    let appLang = gAppLang;
+    if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
     const result = await client.views.publish({
       user_id: event.user,
       view: {
         type: "home",
-        blocks: [
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Hello*, here is how to create a poll with OpenPoll+.",
-            },
-          },
-          {
-            type: "divider",
-          },
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: "Create poll",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*From command*\nJust type `/"+slackCommand+"` where you type the message and press Enter without any options. A modal dialog will pop up and guide you to create one.\n\nIf you want to create one with single line of command, please add options, question and your choices. For both question and your choices please surround it with \"quotes\"",
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*From shortcuts*\nOpen shortcuts and select \"Create Poll\"",
-            },
-          },
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: "Delete poll",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "Click Menu and select Delete at your poll.\nOnly the creator can delete a poll.",
-            },
-          },
-          {
-            type: "divider",
-          },
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: "Options",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "The options are optionals settings to apply to the poll.\nDon't surround options with quotes.",
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Anonymous*\n`anonymous` inside command.\nThis option allow you to hide voters.",
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Limited choices*\n`limit x` inside command. Replace \"x\" by desired number.\nThis option limit maximum choice for each users. If \"2\", each user can only select 2 choices.",
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Hidden*\n`hidden` inside command.\nThis option hide the number of votes for each choice. You can reveal votes with a button at bottom of poll. Only the creator can reveal votes.",
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Allow choices from others*\n`add-choice` inside command.\nThis option allow other member to add more choice to this poll.",
-            },
-          },
-          {
-            type: "divider",
-          },
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: "Examples",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Simple poll*\nThis example will create a basic poll.",
-            },
-          },
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with `\\"` and escaped `\\ ` with `\\\\` ',
-            },
-          },
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: '(Supported double quote: '+getSupportDoubleQuoteToStr()+')',
-            },
-          },
-          {
-            type: "input",
-            element: {
-              type: "plain_text_input",
-              initial_value: "/"+slackCommand+" \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\""
-            },
-            label: {
-              type: "plain_text",
-              text: " ",
-              emoji: true,
-            },
-          },
-          {
-            type: "input",
-            element: {
-              type: "plain_text_input",
-              initial_value: "/"+slackCommand+" \"Please select \\\"HELLO\\\" ?\" \"HELLO\" \"HELlo\" \"helLo\" \"HE\\\"LL\\\"O\""
-            },
-            label: {
-              type: "plain_text",
-              text: " ",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Anonymous poll*\nThis example will create anonymous poll.",
-            },
-          },
-          {
-            type: "input",
-            element: {
-              type: "plain_text_input",
-              initial_value: "/"+slackCommand+" anonymous \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
-            },
-            label: {
-              type: "plain_text",
-              text: " ",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Limited poll*\nThis example will create anonymous poll.",
-            },
-          },
-          {
-            type: "input",
-            element: {
-              type: "plain_text_input",
-              initial_value: "/"+slackCommand+" limit 2 \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
-            },
-            label: {
-              type: "plain_text",
-              text: " ",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Hidden poll*\nThis example will create hidden poll and allow you to reveal votes.",
-            },
-          },
-          {
-            type: "input",
-            element: {
-              type: "plain_text_input",
-              initial_value: "/"+slackCommand+" hidden \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
-            },
-            label: {
-              type: "plain_text",
-              text: " ",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Mixed options poll*\nThis example will create anonymous and limited poll.",
-            },
-          },
-          {
-            type: "input",
-            element: {
-              type: "plain_text_input",
-              initial_value: "/"+slackCommand+" anonymous limit 2 \"What's you favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"",
-            },
-            label: {
-              type: "plain_text",
-              text: " ",
-              emoji: true,
-            },
-          },
-          {
-            type: "divider",
-          },
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: "Tips",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Private channel*\nTo create poll in private channels, please use `/"+slackCommand+"` command. If you using Shortcut or Schedule you need to invite the bot inside with `/invite` command.",
-            },
-          },
-          // {
-          //   type: "section",
-          //   text: {
-          //     type: "mrkdwn",
-          //     text: "*Private messages*\nTo create poll in private messages, you need to invite the bot inside with `/invite` command.",
-          //   },
-          // },
-          {
-            type: "divider",
-          },
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: "Advanced Schedule and Recurring polling",
-              emoji: true,
-            },
-          },
-
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "*Create Schedule and Recurring poll*",
-            },
-          },
-          {
-            type: "input",
-            element: {
-              type: "plain_text_input",
-              initial_value: "/"+slackCommand+" schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]",
-            },
-            label: {
-              type: "plain_text",
-              text: " ",
-              emoji: true,
-            },
-          },
-
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "- Bot MUST in the channel.\n" +
-                  "- Only one schedule for each poll, reschedule will replace previous one.\n" +
-                  "- `POLL_ID` = ID of poll to schedule (eg. `0123456789abcdef01234567`).\n" +
-                  "  - To get Poll ID: go to exist poll > `Menu` > `Command Info.`.\n" +
-                  "- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`).\n" +
-                  "- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created (eg. `A0123456`).\n" +
-                  "  - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.\n" +
-                  "- `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression] in UTC Timezone (with \"Double Quote\") here (eg. `\"30 12 15 * *\"` , Post poll 12:30 PM on the 15th day of every month in UTC).\n" +
-                  "- `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`"+gScheduleMaxRun+"` times), After Run Counter greater than this number; schedule will disable itself.\n" +
-                  "\n" +
-                  "NOTE: If a cron expression results in having more than 1 job within `"+gScheduleLimitHr+"` hours, the Poll will post once, and then the job will get disabled.\n" +
-                  "For more information please visit <"+helpLink+"|full document here>.",
-            },
-          },
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: "Example:\n"+
-                  "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
-                  "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"30 12 15 * *\" 12```\n" +
-                  "```/"+slackCommand+" schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"30 12 15 * *\" 12```"
-            },
-          },
-
-          {
-            type: "divider",
-          },
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: "Limitations",
-              emoji: true,
-            },
-          },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: "Slack have limitations and that include \"message length\". So you can't have more than 15 options per poll. You can create multiple polls if you want more options",
-            },
-          },
-        ],
+        blocks: createHelpBlock(appLang),
       },
     });
   } catch (e) {
@@ -1339,262 +1362,264 @@ async function processCommand(ack, body, client, command, context, say, respond)
     }
 
     if (isHelp) {
-      const blocks = [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Open source poll for Slack*',
-          },
-        },
-        {
-          type: 'divider',
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Create a poll using modal*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + "```",
-          },
-        },
-        {
-          type: 'divider',
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Create a poll using command*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with `\\"` and escaped `\\ ` with `\\\\`  ',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '(Supported double quote: ' + getSupportDoubleQuoteToStr() + ')',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Simple poll*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\".\n```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " \"Please select \\\"HELLO\\\" ?\" \"HELLO\" \"HELlo\" \"helLo\" \"HE\\\"LL\\\"O\"\n```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Anonymous poll*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " anonymous \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Hidden poll votes*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " hidden \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Limited choice poll*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Anonymous limited choice poll*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " anonymous limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Allow choices add by others*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " add-choice \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Change poll language for current poll only*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " lang th \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
-          },
-        },
-
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Advanced Schedule/Recurring Poll*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
-                "\n/" + slackCommand + " schedule delete [POLL_ID]" +
-                "\n/" + slackCommand + " schedule list" +
-                "\n/" + slackCommand + " schedule delete_done" +
-                "```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "\n- Bot MUST in the channel" +
-                "\n- Only one schedule for each poll, reschedule will replace previous one" +
-                "\n- `POLL_ID` = ID of poll to schedule " +
-                "\n   - You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
-                "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)" +
-                "\n- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
-                "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
-                "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format|[cron expression]>\" in UTC Timezone (with \"Double Quote\")" +
-                "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possible. (`" + gScheduleMaxRun + "` Times)" +
-                "\n\n*NOTE*: If a cron expression results in having more than 1 job within `" + gScheduleLimitHr + "` hours, the Poll will post once, and then the job will get disabled.\n For more information please visit <" + helpLink + "|full document here>." +
-                "",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "Supported cron expression format: ```" +
-                "\n*    *    *    *    *" +
-                "\n┬    ┬    ┬    ┬    ┬" +
-                "\n│    │    │    │    |" +
-                "\n│    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)" +
-                "\n│    │    │    └───── month (1 - 12)" +
-                "\n│    │    └────────── day of month (1 - 31, L)" +
-                "\n│    └─────────────── hour (0 - 23)" +
-                "\n└──────────────────── minute (0 - 59)" +
-                "```",
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "Example:\n" +
-                "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
-                "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"30 12 15 * *\" 12```\n" +
-                "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"30 12 15 * *\" 12```"
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*Config Open Poll for this Workspace*',
-          },
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: "```\n/" + slackCommand + " config```",
-          },
-        },
-        {
-          type: 'divider',
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: parameterizedString(stri18n(appLang, 'info_need_help'), {email: helpEmail, link: helpLink}),
-            //text: stri18n(appLang,'info_need_help')
-          },
-        },
-        // {
-        //   type: 'section',
-        //   text: {
-        //     type: 'mrkdwn',
-        //     text: `${helpEmail}`,
-        //   },
-        // },
-        // {
-        //   type: 'section',
-        //   text: {
-        //     type: 'mrkdwn',
-        //     text: `<${helpLink}|${helpLink}>`,
-        //   },
-        // },
-      ];
+      // const blocks = [
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Open source poll for Slack*',
+      //     },
+      //   },
+      //   {
+      //     type: 'divider',
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Create a poll using modal*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + "```",
+      //     },
+      //   },
+      //   {
+      //     type: 'divider',
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Create a poll using command*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '"Question" and "Options" should enclosed in double quotation marks, no double quotation marks for poll options. If you have "Double Quotation" in your question or choices escaped quotes it with `\\"` and escaped `\\ ` with `\\\\`  ',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '(Supported double quote: ' + getSupportDoubleQuoteToStr() + ')',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Simple poll*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\".\n```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " \"Please select \\\"HELLO\\\" ?\" \"HELLO\" \"HELlo\" \"helLo\" \"HE\\\"LL\\\"O\"\n```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Anonymous poll*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " anonymous \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Hidden poll votes*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " hidden \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Limited choice poll*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Anonymous limited choice poll*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " anonymous limit 2 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Allow choices add by others*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " add-choice \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Change poll language for current poll only*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " lang th \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"\n```",
+      //     },
+      //   },
+      //
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Advanced Schedule/Recurring Poll*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " schedule create [POLL_ID] [TS] [CH_ID] \"[CRON_EXP]\" [MAX_RUN]" +
+      //           "\n/" + slackCommand + " schedule delete [POLL_ID]" +
+      //           "\n/" + slackCommand + " schedule list" +
+      //           "\n/" + slackCommand + " schedule delete_done" +
+      //           "```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "\n- Bot MUST in the channel" +
+      //           "\n- Only one schedule for each poll, reschedule will replace previous one" +
+      //           "\n- `POLL_ID` = ID of poll to schedule " +
+      //           "\n   - You can get Poll ID from your exist poll > `Menu` > `Command Info.`" +
+      //           "\n- `TS` = Time stamp of first run (ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`, eg. `2023-11-17T21:54:00+07:00`)" +
+      //           "\n- `CH_ID` = (Optional) Channel ID to post the poll, set to `-` to post to orginal channel that poll was created" +
+      //           "\n   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom." +
+      //           "\n- `CRON_EXP` = (Optional) Empty for run once, or put \"<https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format|[cron expression]>\" in UTC Timezone (with \"Double Quote\")" +
+      //           "\n- `MAX_RUN` = (Optional) After Run Counter greater than this number; schedule will disable itself, do not set to run as long as possible. (`" + gScheduleMaxRun + "` Times)" +
+      //           "\n\n*NOTE*: If a cron expression results in having more than 1 job within `" + gScheduleLimitHr + "` hours, the Poll will post once, and then the job will get disabled.\n For more information please visit <" + helpLink + "|full document here>." +
+      //           "",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "Supported cron expression format: ```" +
+      //           "\n*    *    *    *    *" +
+      //           "\n┬    ┬    ┬    ┬    ┬" +
+      //           "\n│    │    │    │    |" +
+      //           "\n│    │    │    │    └ day of week (0 - 7, 1L - 7L) (0 or 7 is Sun)" +
+      //           "\n│    │    │    └───── month (1 - 12)" +
+      //           "\n│    │    └────────── day of month (1 - 31, L)" +
+      //           "\n│    └─────────────── hour (0 - 23)" +
+      //           "\n└──────────────────── minute (0 - 59)" +
+      //           "```",
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "Example:\n" +
+      //           "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00```\n" +
+      //           "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - \"30 12 15 * *\" 12```\n" +
+      //           "```/" + slackCommand + " schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 \"30 12 15 * *\" 12```"
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: '*Config Open Poll for this Workspace*',
+      //     },
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: "```\n/" + slackCommand + " config```",
+      //     },
+      //   },
+      //   {
+      //     type: 'divider',
+      //   },
+      //   {
+      //     type: 'section',
+      //     text: {
+      //       type: 'mrkdwn',
+      //       text: parameterizedString(stri18n(appLang, 'info_need_help'), {email: helpEmail, link: helpLink}),
+      //       //text: stri18n(appLang,'info_need_help')
+      //     },
+      //   },
+      //   // {
+      //   //   type: 'section',
+      //   //   text: {
+      //   //     type: 'mrkdwn',
+      //   //     text: `${helpEmail}`,
+      //   //   },
+      //   // },
+      //   // {
+      //   //   type: 'section',
+      //   //   text: {
+      //   //     type: 'mrkdwn',
+      //   //     text: `<${helpLink}|${helpLink}>`,
+      //   //   },
+      //   // },
+      // ];
+      //
+      const blocks = createHelpBlock(appLang);
       let mRequestBody = {
         token: context.botToken,
         channel: channel,
@@ -1617,6 +1642,7 @@ async function processCommand(ack, body, client, command, context, say, respond)
       let isHidden = false;
       let isAllowUserAddChoice = false;
       let fetchArgs = true;
+      let postDateTime = null;
 
 
       while (fetchArgs) {
@@ -2249,7 +2275,27 @@ async function processCommand(ack, body, client, command, context, say, respond)
             limit = parseInt(cmdBody.substring(0, cmdBody.indexOf(' ')));
             cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
           }
-        } else if (cmdBody.startsWith('lang')) {
+        } else if (cmdBody.startsWith('on')) {
+          fetchArgs = true;
+          cmdBody = cmdBody.substring(2).trim();
+
+          postDateTime = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+
+          if (!isValidISO8601(postDateTime)) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              //blocks: blocks,
+              text: "```" + fullCmd + "```\n" + stri18n(userLang, 'task_error_date_invalid')
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+          }
+
+          cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
+        }
+        else if (cmdBody.startsWith('lang')) {
           fetchArgs = true;
           cmdBody = cmdBody.substring(4).trim();
           let inputLang = (cmdBody.substring(0, cmdBody.indexOf(' ')));
@@ -2550,9 +2596,9 @@ async function processCommand(ack, body, client, command, context, say, respond)
         return;
       }
 
-      let blocks = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, fullCmd, "cmd", null, null));
-
-
+      const pollView = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, fullCmd, "cmd", null, null));
+      const blocks = pollView?.blocks;
+      const pollID = pollView?.poll_id;
       if (null === blocks) {
         let mRequestBody = {
           token: context.botToken,
@@ -2565,27 +2611,83 @@ async function processCommand(ack, body, client, command, context, say, respond)
         return;
       }
 
-      let mRequestBody = {
-        token: context.botToken,
-        channel: channel,
-        blocks: blocks.blocks,
-        text: `Poll : ${question}`,
-      };
-      const postRes = await postChat(body.response_url, 'post', mRequestBody);
-      if (postRes.status === false) {
+      if (postDateTime === null) {
+        let mRequestBody = {
+          token: context.botToken,
+          channel: channel,
+          blocks: blocks,
+          text: `Poll : ${question}`,
+        };
+        const postRes = await postChat(body.response_url, 'post', mRequestBody);
+        if (postRes.status === false) {
+          try {
+            logger.debug("Block count:" + blocks?.length);
+            console.log(postRes);
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              text: `Error while create poll: \`${fullCmd}\` \nERROR:${postRes.message}`
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+          } catch (e) {
+            //not able to dm user
+            console.log(e);
+          }
+        }
+      } else {
         try {
-          logger.debug("Block count:" + blocks?.blocks?.length);
-          console.log(postRes);
+          const schTs = new Date(postDateTime);
+          const dataToInsert = {
+            poll_id: new ObjectId(pollID),
+            next_ts: schTs,
+            created_cmd: fullCmd,
+            created_ts: new Date(),
+            created_user_id: userId,
+            run_max: 1,
+            is_done: false,
+            is_enable: true,
+            poll_ch: null,
+            cron_string: null,
+          };
+
+          await scheduleCol.replaceOne(
+              {poll_id: new ObjectId(pollID)}, // Filter document with the same poll_id
+              dataToInsert, // New document to be inserted
+              {upsert: true} // Option to insert a new document if no matching document is found
+          );
+          let actString = "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'task_scheduled'), {
+            poll_id: pollID,
+            ts: postDateTime,
+            poll_ch: null,
+            cron_string: null,
+            run_max: 1
+          });
+
           let mRequestBody = {
             token: context.botToken,
             channel: channel,
             user: userId,
-            text: `Error while create poll: \`${fullCmd}\` \nERROR:${postRes.message}`
+            text: actString
+            ,
+          };
+          const postRes = await postChat(body.response_url, 'ephemeral', mRequestBody);
+          logger.verbose(`[Schedule] New simple task create from CMD (PollID:${pollID})`);
+
+        } catch (e) {
+
+          logger.error(`[Schedule] New simple task create from CMD (PollID:${pollID}) ERROR`);
+          logger.error(e.toString() + "\n" + e.stack);
+          console.log(e);
+          console.trace();
+          let mRequestBody = {
+            token: context.botToken,
+            channel: channel,
+            user: userId,
+            text: "```" + fullCmd + "```\n" +"[Schedule] Scheduled Error"
           };
           await postChat(body.response_url, 'ephemeral', mRequestBody);
-        } catch (e) {
-          //not able to dm user
-          console.log(e);
+          return;
         }
       }
 
@@ -4404,6 +4506,15 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     // logger.silly(body);
     // logger.silly(context);
 
+    let posttimestamp = null;
+    let schTs = null;
+    let isoStr = null;
+
+    if(postDateTime !== null) {
+      posttimestamp = parseInt(postDateTime, 10);
+      schTs = new Date(posttimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
+      isoStr = schTs.toISOString();
+    }
     if (
         !question
         || 0 === options.length
@@ -4419,7 +4530,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
 
     let cmd = "";
     try {
-      cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang);
+      cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang, isoStr);
     } catch (e) {
       logger.error(e);
 
@@ -4538,9 +4649,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       //console.log(postDateTime);
       try {
 
-        let posttimestamp = parseInt(postDateTime, 10);
-        const schTs = new Date(posttimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
-        let isoStr = schTs.toISOString();
+
         //console.log(isoStr);
         //console.log(schTs);;
         const dataToInsert = {
@@ -4624,7 +4733,7 @@ app.view('modal_delete_confirm', async ({ ack, body, view, context }) => {
     console.trace();
   }
 });
-function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang) {
+function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang, postDateTime) {
   let cmd = `/${slackCommand}`;
   if (isAnonymous) {
     cmd += ` anonymous`
@@ -4643,6 +4752,9 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   }
   if (userLang!=null) {
     cmd += ` lang ${userLang}`
+  }
+  if (postDateTime!=null) {
+    cmd += ` on ${postDateTime}`
   }
 
   let processingOption = "";
@@ -5184,22 +5296,30 @@ async function commandInfo(body, client, context, value) {
     }
   ];
 
-  const result = await client.views.open({
-    token: context.botToken,
-    trigger_id: body.trigger_id,
-    view: {
-      type: 'modal',
-      title: {
-        type: 'plain_text',
-        text: stri18n(appLang,'menu_command_info'),
-      },
-      close: {
-        type: 'plain_text',
-        text: stri18n(appLang,'btn_close'),
-      },
-      blocks: blocks,
-    }
-  });
+  try {
+    const result = await client.views.open({
+      token: context.botToken,
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        title: {
+          type: 'plain_text',
+          text: stri18n(appLang,'menu_command_info'),
+        },
+        close: {
+          type: 'plain_text',
+          text: stri18n(appLang,'btn_close'),
+        },
+        blocks: blocks,
+      }
+    });
+  }
+  catch (e) {
+    logger.error("Failed to create commandInfo")
+    logger.error(e)
+    logger.error(e.toString()+"\n"+e.stack);
+  }
+
   return;
 
 }

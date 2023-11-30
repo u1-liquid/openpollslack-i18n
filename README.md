@@ -114,6 +114,12 @@ For `\ ` escaped with `\\`
 /poll lang th "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
 
+### Simple Schedule Poll
+```
+/poll on 2023-11-15T10:30:00+07:00 "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
+```
+- Time stamp should be in ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`
+
 ### Advanced Schedule/Recurring Poll
 Schedule a poll that create by yourself:
 ```
