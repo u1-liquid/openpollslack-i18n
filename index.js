@@ -239,6 +239,7 @@ const createDBIndex = async () => {
   closedCol.createIndex({ channel: 1, ts: 1 });
   hiddenCol.createIndex({ channel: 1, ts: 1 });
   pollCol.createIndex({ channel: 1, ts: 1 });
+  pollCol.createIndex({ schedule_end_active: 1, schedule_end_ts: 1 });
   scheduleCol.createIndex({ poll_id: 1, next_ts: 1, is_enable: 1, is_done: 1   });
   scheduleCol.createIndex({ next_ts: 1, is_enable: 1 , is_done: 1  });
 }
@@ -571,12 +572,13 @@ const checkAndExecuteTasks = async () => {
 
   try {
     const closingTasks = await pollCol.find({
-      schedule_end_ts: { $lte: currentDateTime },
       schedule_end_active: true,
+      schedule_end_ts: { $lte: currentDateTime },
+
     }).toArray();
 
-    for (const task of closingTasks) {
-      logger.debug(`[closingTasks] closing poll_id: ${task._id}.`);
+    for (const poll of closingTasks) {
+      logger.debug(`[closingTasks] closing poll_id: ${poll._id}.`);
 
       //get msg block
 
@@ -591,8 +593,8 @@ const checkAndExecuteTasks = async () => {
       //update poll
 
 
-      await scheduleCol.updateOne(
-          { _id: task._id },
+      await pollCol.updateOne(
+          { _id: poll._id },
           { $set: { schedule_end_active: false } }
       );
 
@@ -600,6 +602,7 @@ const checkAndExecuteTasks = async () => {
 
   } catch (e) {
     logger.error(e);
+    console.log(e);
   }
 
 };
@@ -3046,8 +3049,10 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
           }
         }
 
+        let voteType = '+';
         if (removeVote) {
           poll[value.id] = poll[value.id].filter(voter_id => voter_id !== user_id);
+          voteType = '-';
         } else {
           poll[value.id].push(user_id);
         }
@@ -3130,6 +3135,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
             votes: poll,
           }
         });
+        logger.debug(`Vote ${voteType} For ${poll_id} : ${value.id}`);
 
         let mRequestBody = {
           token: context.botToken,
@@ -4446,7 +4452,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         text: `Poll : ${question}`,
       };
       const postRes = await postChat(response_url, 'post', mRequestBody);
-      //console.log(postRes);
+      //console.log(postRes.slack_response);
       if (postRes.status === false) {
         let ackErr = {
           response_action: 'errors',
@@ -4690,11 +4696,11 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
               revealed: !isHidden,
               user: userId,
               user_lang: userLang,
-              z_mat: isMenuAtTheEnd ? 1 : 0,
-              z_cp: isCompactUI ? 1 : 0,
-              z_div: isShowDivider ? 1 : 0,
-              z_help: isShowHelpLink ? 1 : 0,
-              z_cmd: isShowCommandInfo ? 1 : 0
+              mte: isMenuAtTheEnd ? 1 : 0,
+              cui: isCompactUI ? 1 : 0,
+              sdv: isShowDivider ? 1 : 0,
+              shp: isShowHelpLink ? 1 : 0,
+              scm: isShowCommandInfo ? 1 : 0
             }),
       }, {
         text: {
@@ -4703,6 +4709,7 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
         },
         value: JSON.stringify({
           action: 'btn_users_votes',
+          p_id: pollID,
           user: userId,
           user_lang: userLang,
           anonymous: isAnonymous,
@@ -4715,13 +4722,14 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
         },
         value: JSON.stringify({
           action: 'btn_close',
+          p_id: pollID,
           user: userId,
           user_lang: userLang,
-          z_mat: isMenuAtTheEnd ? 1 : 0,
-          z_cp: isCompactUI ? 1 : 0,
-          z_div: isShowDivider ? 1 : 0,
-          z_help: isShowHelpLink ? 1 : 0,
-          z_cmd: isShowCommandInfo ? 1 : 0
+          mte: isMenuAtTheEnd ? 1 : 0,
+          cui: isCompactUI ? 1 : 0,
+          sdv: isShowDivider ? 1 : 0,
+          shp: isShowHelpLink ? 1 : 0,
+          scm: isShowCommandInfo ? 1 : 0
         }),
       }, {
         text: {
@@ -5397,15 +5405,15 @@ async function revealOrHideVotes(body, context, value) {
   let appLang= gAppLang;
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
-  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = toBoolean(value.z_mat);
+  if(value.hasOwnProperty("mte")) isMenuAtTheEnd = toBoolean(value.mte);
   else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
 
   let isCompactUI = gIsCompactUI;
-  if(value.hasOwnProperty("z_cp")) isCompactUI = toBoolean(value.z_cp);
+  if(value.hasOwnProperty("cui")) isCompactUI = toBoolean(value.cui);
   else if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
 
   let isShowDivider = gIsShowDivider;
-  if(value.hasOwnProperty("z_div")) isShowDivider = toBoolean(value.z_div);
+  if(value.hasOwnProperty("sdv")) isShowDivider = toBoolean(value.sdv);
   else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
   if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
   if (
@@ -5796,7 +5804,7 @@ async function closePoll(body, client, context, value) {
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
-  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = toBoolean(value.z_mat);
+  if(value.hasOwnProperty("mte")) isMenuAtTheEnd = toBoolean(value.mte);
   else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
 
   if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
