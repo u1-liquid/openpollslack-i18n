@@ -291,8 +291,8 @@ function calculateNextScheduleTime(cronString,timeZoneString) {
   }
 }
 const checkAndExecuteTasks = async () => {
+  const currentDateTime = new Date();
   try {
-    const currentDateTime = new Date();
     const pendingTasks = await scheduleCol.find({
       next_ts: { $lte: currentDateTime },
       is_enable: true,
@@ -402,7 +402,7 @@ const checkAndExecuteTasks = async () => {
 
 
           const blocks = (await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
-              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task_schedule",task.poll_id,cmdNote)).blocks;
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.schedule_end_ts, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task_schedule",task.poll_id,cmdNote)).blocks;
 
 
           if (null === blocks) {
@@ -568,6 +568,40 @@ const checkAndExecuteTasks = async () => {
   } catch (e) {
     logger.error(e);
   }
+
+  try {
+    const closingTasks = await pollCol.find({
+      schedule_end_ts: { $lte: currentDateTime },
+      schedule_end_active: true,
+    }).toArray();
+
+    for (const task of closingTasks) {
+      logger.debug(`[closingTasks] closing poll_id: ${task._id}.`);
+
+      //get msg block
+
+      //update closedCol
+      // await closedCol.updateOne({
+      //   channel,
+      //   ts: message.ts,
+      // }, {
+      //   $set: { closed: true }
+      // });
+
+      //update poll
+
+
+      await scheduleCol.updateOne(
+          { _id: task._id },
+          { $set: { schedule_end_active: false } }
+      );
+
+    }
+
+  } catch (e) {
+    logger.error(e);
+  }
+
 };
 
 const autoCleanupTask = async () => {
@@ -1386,6 +1420,7 @@ async function processCommand(ack, body, client, command, context, say, respond)
       let isAllowUserAddChoice = false;
       let fetchArgs = true;
       let postDateTime = null;
+      let endDateTime = null;
 
 
       while (fetchArgs) {
@@ -2037,6 +2072,25 @@ async function processCommand(ack, body, client, command, context, say, respond)
           }
 
           cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
+        } else if (cmdBody.startsWith('end')) {
+          fetchArgs = true;
+          cmdBody = cmdBody.substring(3).trim();
+
+          endDateTime = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+
+          if (!isValidISO8601(endDateTime)) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              //blocks: blocks,
+              text: "```" + fullCmd + "```\n" + stri18n(userLang, 'task_error_date_invalid')
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+          }
+
+          cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
         }
         else if (cmdBody.startsWith('lang')) {
           fetchArgs = true;
@@ -2339,7 +2393,12 @@ async function processCommand(ack, body, client, command, context, say, respond)
         return;
       }
 
-      const pollView = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, fullCmd, "cmd", null, null));
+      let endTs = null;
+      if(endDateTime !== null) {
+        endTs = new Date(endDateTime);
+      }
+
+      const pollView = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, fullCmd, "cmd", null, null));
       const blocks = pollView?.blocks;
       const pollID = pollView?.poll_id;
       if (null === blocks) {
@@ -4136,6 +4195,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     const teamConfig = await getTeamOverride(teamOrEntId);
     let appLang = gAppLang;
     let postDateTime = null;
+    let endDateTime = null;
     if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
     const privateMetadata = JSON.parse(view.private_metadata);
     const userId = body.user.id;
@@ -4186,6 +4246,10 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
           privateMetadata.channel = option.selected_conversation;
         } else if ('task_when' === optionName) {
           privateMetadata.when = option.selected_option?.value;
+        } else if ('poll_end' === optionName) {
+          privateMetadata.poll_end = option.selected_option?.value;
+        } else if ('poll_end_ts' === optionName) {
+          endDateTime = option.selected_date_time;
         }
       }
     }
@@ -4195,6 +4259,17 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         response_action: 'errors',
         errors: {
           task_when: parameterizedString(stri18n(appLang, 'task_scheduled_time_missing'),{task_scheduled_later:stri18n(appLang, 'task_scheduled_later')}),
+        },
+      };
+      await ack(ackErr);
+      return;
+    }
+
+    if(privateMetadata.poll_end==="schedule" && endDateTime==null) {
+      let ackErr = {
+        response_action: 'errors',
+        errors: {
+          poll_end_ts: parameterizedString(stri18n(appLang, 'task_scheduled_time_missing'),{task_scheduled_later:stri18n(appLang, 'task_scheduled_later')}),
         },
       };
       await ack(ackErr);
@@ -4258,6 +4333,17 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       schTs = new Date(posttimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
       isoStr = schTs.toISOString();
     }
+
+    let endtimestamp = null;
+    let endTs = null;
+    let endisoStr = null;
+
+    if(endDateTime !== null) {
+      endtimestamp = parseInt(endDateTime, 10);
+      endTs = new Date(endtimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
+      endisoStr = endTs.toISOString();
+    }
+
     if (
         !question
         || 0 === options.length
@@ -4273,7 +4359,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
 
     let cmd = "";
     try {
-      cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang, isoStr);
+      cmd = createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang, isoStr, endisoStr);
     } catch (e) {
       logger.error(e);
 
@@ -4349,7 +4435,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       return;
     }
 
-    const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd, cmd_via, null, null);
+    const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, cmd, cmd_via, null, null);
     const blocks = pollView.blocks;
     const pollID = pollView.poll_id;
     if (postDateTime === null) {
@@ -4476,7 +4562,7 @@ app.view('modal_delete_confirm', async ({ ack, body, view, context }) => {
     console.trace();
   }
 });
-function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang, postDateTime) {
+function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, userLang, postDateTime, endisoStr) {
   let cmd = `/${slackCommand}`;
   if (isAnonymous) {
     cmd += ` anonymous`
@@ -4498,6 +4584,9 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   }
   if (postDateTime!=null) {
     cmd += ` on ${postDateTime}`
+  }
+  if (endisoStr!=null) {
+    cmd += ` end ${endisoStr}`
   }
 
   let processingOption = "";
@@ -4526,7 +4615,7 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   return cmd;
 }
 
-async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, userLang, userId, cmd,cmd_via,cmd_via_ref,cmd_via_note) {
+async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endDateTime, userLang, userId, cmd,cmd_via,cmd_via_ref,cmd_via_note) {
   if (
     !question
     || !options
@@ -4554,11 +4643,15 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
     id: null,
   };
 
+  let isScheduleEndActive = false;
+  if(endDateTime!== null) isScheduleEndActive = true
   const pollData = {
     team: teamOrEntId,
     channel,
     ts: null,
     created_ts: new Date(),
+    schedule_end_ts: endDateTime,
+    schedule_end_active: isScheduleEndActive,
     user_id: userId,
     cmd: cmd,
     cmd_via,
