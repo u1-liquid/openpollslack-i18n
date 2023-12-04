@@ -126,6 +126,7 @@
   "err_mutex_lock": "[Try #{{{count_try}}] Error while attempt to acquire mutex lock.",
   "err_slack_limit_choices_max": "Maximum number of choices is `{{slack_limit_choices}}` due to Slack limitation.",
   "err_bot_not_in_ch": "We can't post in selected channel \nplease `/invite \"@{{bot_name}}\"` to that channel first",
+  "err_bot_not_in_ch_schedule": "For schedule poll you need to `/invite \"@{{bot_name}}\"` to that channel first",
   "err_please_check_input": "Please check your input.",
   "emoji_1": ":one:",
   "emoji_2": ":two:",

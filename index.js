@@ -402,9 +402,10 @@ const checkAndExecuteTasks = async () => {
           ///////////////
 
 
-          const blocks = (await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
-              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.para?.schedule_end_ts, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task_schedule",task.poll_id,cmdNote)).blocks;
-
+          const pollView = (await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.schedule_end_ts, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task_schedule",task.poll_id,cmdNote));
+          const blocks = pollView?.blocks;
+          const pollID = pollView?.poll_id;
 
           if (null === blocks) {
             errMsg = `[Schedule] Failed to create poll ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`;
@@ -429,6 +430,11 @@ const checkAndExecuteTasks = async () => {
             );
             //continue;
           } else {
+            //update slack_ts
+            await pollCol.updateOne(
+                { _id: new ObjectId(pollID)},
+                { $set: { ts: postRes.slack_ts } }
+            );
             if(taskRunCounter>=taskRunMax) {
               //last one
               dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti_done'), {info:"",poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} );
@@ -851,7 +857,7 @@ const sendMessageUsingUrl = async (url,newMessage) => {
 }
 
 const postChat = async (url,type,requestBody) => {
-  let ret = {status:false,message : "N/A",slack_response:null};
+  let ret = {status:false,message : "N/A",slack_response:null, slack_ts:null };
   const addChNotFoundErr = "(Bot might not in this channel)";
   try {
     if(isUseResponseUrl && url!==undefined && url!=="")
@@ -910,6 +916,7 @@ const postChat = async (url,type,requestBody) => {
             ret.message = "Invalid post type:"+type;
             return ret;
         }
+        if(ret.slack_response) ret.slack_ts = ret.slack_response?.ts;
 
     }
   } catch (e) {
@@ -1339,6 +1346,9 @@ app.command(`/${slackCommand2}`, async ({ ack, body, client, command, context, s
 async function processCommand(ack, body, client, command, context, say, respond) {
   try {
     const receivedTime = new Date().getTime();
+    //if response_url with simple poll, no schedule bot is not required in ch
+    let reqBotInCh = false;
+    let forceNotUsingResponseURL = false;
     await ack();
     let cmdBody = (command && command.text) ? command.text.trim() : null;
 
@@ -1625,6 +1635,7 @@ async function processCommand(ack, body, client, command, context, say, respond)
 
               //phase CH_ID
               schCH = null;
+              let chToCheck = channel;
               if (!isEndOfCmd) {
                 inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
                 if (inputPara === "") {
@@ -1635,34 +1646,34 @@ async function processCommand(ack, body, client, command, context, say, respond)
 
                 if (inputPara !== '-') {
                   schCH = inputPara.trim();
+                  chToCheck = schCH
+                }
+              }
 
-                  try {
-                    const result = await client.conversations.info({
-                      token: context.botToken,
-                      channel: schCH
-                    });
-                  } catch (e) {
-                    if (e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted')) {
-                      let mRequestBody = {
-                        token: context.botToken,
-                        channel: channel,
-                        user: userId,
-                        text: "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'err_para_invalid'), {
-                          parameter: "[CH_ID]",
-                          value: inputPara,
-                          error_msg: "(Bot not in Channel or not found)"
-                        })
-                      };
-                      await postChat(body.response_url, 'ephemeral', mRequestBody);
-                      return;
-                    } else {
-                      //ignore it!
-                      logger.debug(`Error on client.conversations.info (CH:${schCH}) :` + e.message);
-                      console.log(e);
-                      console.trace();
-                    }
-                  }
-
+              try {
+                const result = await client.conversations.info({
+                  token: context.botToken,
+                  channel: chToCheck
+                });
+              } catch (e) {
+                if (e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted')) {
+                  let mRequestBody = {
+                    token: context.botToken,
+                    channel: channel,
+                    user: userId,
+                    text: "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'err_para_invalid'), {
+                      parameter: "[CH_ID]",
+                      value: inputPara,
+                      error_msg: "(Bot not in Channel or not found)"
+                    })
+                  };
+                  await postChat(body.response_url, 'ephemeral', mRequestBody);
+                  return;
+                } else {
+                  //ignore it!
+                  logger.debug(`Error on client.conversations.info (CH:${chToCheck}) :` + e.message);
+                  console.log(e);
+                  console.trace();
                 }
               }
 
@@ -2058,6 +2069,7 @@ async function processCommand(ack, body, client, command, context, say, respond)
           }
         } else if (cmdBody.startsWith('on')) {
           fetchArgs = true;
+          reqBotInCh = true;
           cmdBody = cmdBody.substring(2).trim();
 
           postDateTime = (cmdBody.substring(0, cmdBody.indexOf(' ')));
@@ -2077,6 +2089,8 @@ async function processCommand(ack, body, client, command, context, say, respond)
           cmdBody = cmdBody.substring(cmdBody.indexOf(' ')).trim();
         } else if (cmdBody.startsWith('end')) {
           fetchArgs = true;
+          reqBotInCh = true;
+          forceNotUsingResponseURL = true;
           cmdBody = cmdBody.substring(3).trim();
 
           endDateTime = (cmdBody.substring(0, cmdBody.indexOf(' ')));
@@ -2401,6 +2415,33 @@ async function processCommand(ack, body, client, command, context, say, respond)
         endTs = new Date(endDateTime);
       }
 
+      if(reqBotInCh) {
+        try {
+          const result = await client.conversations.info({
+            token: context.botToken,
+            channel: channel
+          });
+        } catch (e) {
+          if (e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted')) {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              text: "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'err_bot_not_in_ch_schedule'), {
+                bot_name: botName,
+              })
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+          } else {
+            //ignore it!
+            logger.debug(`Error on client.conversations.info (CH:${channel}) :` + e.message);
+            console.log(e);
+            console.trace();
+          }
+        }
+      }
+
       const pollView = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, fullCmd, "cmd", null, null));
       const blocks = pollView?.blocks;
       const pollID = pollView?.poll_id;
@@ -2423,7 +2464,7 @@ async function processCommand(ack, body, client, command, context, say, respond)
           blocks: blocks,
           text: `Poll : ${question}`,
         };
-        const postRes = await postChat(body.response_url, 'post', mRequestBody);
+        const postRes = await postChat((forceNotUsingResponseURL?"":body.response_url), 'post', mRequestBody);
         if (postRes.status === false) {
           try {
             logger.debug("Block count:" + blocks?.length);
@@ -2439,6 +2480,12 @@ async function processCommand(ack, body, client, command, context, say, respond)
             //not able to dm user
             console.log(e);
           }
+        } else {
+          //update slack_ts
+          await pollCol.updateOne(
+              { _id: new ObjectId(pollID)},
+              { $set: { ts: postRes.slack_ts } }
+          );
         }
       } else {
         try {
@@ -2694,173 +2741,6 @@ app.action('btn_del_choice', async ({ action, ack, body, client, context }) => {
   }
 
 });
-
-// app.action('btn_my_votes', async ({ ack, body, client, context }) => {
-//   await ack();
-//
-//   if (
-//     !body.hasOwnProperty('user')
-//     || !body.user.hasOwnProperty('id')
-//   ) {
-//     return;
-//   }
-//
-//   const blocks = body.message.blocks;
-//   let votes = [];
-//   const userId = body.user.id;
-//   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-//   let appLang= gAppLang;
-//   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-//
-//   for (const block of blocks) {
-//     if (
-//       'section' !== block.type
-//       || !block.hasOwnProperty('accessory')
-//       || !block.accessory.hasOwnProperty('action_id')
-//       || 'btn_vote' !== block.accessory.action_id
-//       || !block.accessory.hasOwnProperty('value')
-//       || !block.hasOwnProperty('text')
-//       || !block.text.hasOwnProperty('text')
-//     ) {
-//       continue;
-//     }
-//     const value = JSON.parse(block.accessory.value);
-//
-//     if (value.voters.includes(userId)) {
-//       votes.push({
-//         type: 'section',
-//         text: {
-//           type: 'mrkdwn',
-//           text: block.text.text,
-//         },
-//       });
-//       votes.push({
-//         type: 'divider',
-//       });
-//     }
-//   }
-//
-//   if (0 === votes.length) {
-//     votes.push({
-//       type: 'section',
-//       text: {
-//         type: 'mrkdwn',
-//         text: stri18n(appLang,'you_have_not_voted'),
-//       },
-//     });
-//   } else {
-//     votes.pop();
-//   }
-//
-//   try {
-//     await client.views.open({
-//       token: context.botToken,
-//       trigger_id: body.trigger_id,
-//       view: {
-//         type: 'modal',
-//         title: {
-//           type: 'plain_text',
-//           text: stri18n(appLang,'info_your_vote'),
-//         },
-//         close: {
-//           type: 'plain_text',
-//           text: stri18n(appLang,'info_close'),
-//         },
-//         blocks: votes,
-//       }
-//     });
-//   } catch (e) {
-//     logger.error(e);
-//   }
-// });
-//
-// app.action('btn_delete', async ({ action, ack, body, context }) => {
-//   await ack();
-//
-//   if (
-//     !body
-//     || !body.user
-//     || !body.user.id
-//     || !body.message
-//     || !body.message.ts
-//     || !body.channel
-//     || !body.channel.id
-//     || !action
-//     || !action.value
-//   ) {
-//     logger.info('error');
-//     return;
-//   }
-//   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-//   let appLang= gAppLang;
-//   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-//
-//   if (body.user.id !== action.value) {
-//     //logger.debug('reject request because not owner');
-//     let mRequestBody = {
-//       token: context.botToken,
-//       channel: body.channel.id,
-//       user: body.user.id,
-//       attachments: [],
-//       text: stri18n(appLang,'can_not_delete_other'),
-//     };
-//     await postChat(body.response_url,'ephemeral',mRequestBody);
-//     return;
-//   }
-//
-//   let mRequestBody = {
-//     token: context.botToken,
-//     channel: body.channel.id,
-//     ts: body.message.ts,
-//   };
-//   await postChat(body.response_url,'delete',mRequestBody);
-// });
-//
-// app.action('btn_reveal', async ({ action, ack, body, context }) => {
-//   await ack();
-//
-//   if (
-//     !body
-//     || !body.user
-//     || !body.user.id
-//     || !body.message
-//     || !body.message.ts
-//     || !body.message.blocks
-//     || !body.channel
-//     || !body.channel.id
-//     || !action
-//     || !action.value
-//   ) {
-//     logger.info('error');
-//     return;
-//   }
-//   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
-//   let appLang= gAppLang;
-//   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
-//   let value = JSON.parse(action.value);
-//
-//   if (body.user.id !== value.user) {
-//     //logger.debug('reject request because not owner');
-//     let mRequestBody = {
-//       token: context.botToken,
-//       channel: body.channel.id,
-//       user: body.user.id,
-//       attachments: [],
-//       text: stri18n(appLang,'err_reveal_other'),
-//     };
-//     await postChat(body.response_url,'ephemeral',mRequestBody);
-//     return;
-//   }
-//
-//   let mRequestBody = {
-//     token: context.botToken,
-//     channel: body.channel.id,
-//     user: body.user.id,
-//     attachments: [],
-//     text: stri18n(appLang,'err_poll_too_old'),
-//   };
-//   await postChat(body.response_url,'ephemeral',mRequestBody);
-// });
 
 app.action('btn_vote', async ({ action, ack, body, context }) => {
   try {
@@ -4197,6 +4077,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     ) {
       return;
     }
+    let forceNotUsingResponseURL = false;
     const teamOrEntId = getTeamOrEnterpriseId(context);
     const teamConfig = await getTeamOverride(teamOrEntId);
     let appLang = gAppLang;
@@ -4302,18 +4183,45 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       return;
     }
 
-    if (!isUseResponseUrl || !response_url || response_url === "" || postDateTime !== null) {
+    // logger.silly(body);
+    // logger.silly(context);
+
+    let posttimestamp = null;
+    let schTs = null;
+    let isoStr = null;
+
+    if(postDateTime !== null) {
+      forceNotUsingResponseURL = true;
+      posttimestamp = parseInt(postDateTime, 10);
+      schTs = new Date(posttimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
+      isoStr = schTs.toISOString();
+    }
+
+    let endtimestamp = null;
+    let endTs = null;
+    let endisoStr = null;
+
+    if(endDateTime !== null) {
+      forceNotUsingResponseURL = true;
+      endtimestamp = parseInt(endDateTime, 10);
+      endTs = new Date(endtimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
+      endisoStr = endTs.toISOString();
+    }
+
+    if (!isUseResponseUrl || !response_url || response_url === "" || forceNotUsingResponseURL) {
       try {
         const result = await client.conversations.info({
           token: context.botToken,
           channel: channel
         });
       } catch (e) {
+        let errMsg = parameterizedString(stri18n(appLang, 'err_bot_not_in_ch'), {bot_name: botName});
+        if(forceNotUsingResponseURL)  errMsg = parameterizedString(stri18n(appLang, 'err_bot_not_in_ch_schedule'), {bot_name: botName});
         if (e.message.includes('channel_not_found') || e.message.includes('team_not_found') || e.message.includes('team_access_not_granted')) {
           await ack({
             response_action: 'errors',
             errors: {
-              task_when: parameterizedString(stri18n(appLang, 'err_bot_not_in_ch'), {bot_name: botName}),
+              task_when: errMsg,
             },
           });
           return;
@@ -4327,28 +4235,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       }
       //await ack();
     }
-    // logger.silly(body);
-    // logger.silly(context);
 
-    let posttimestamp = null;
-    let schTs = null;
-    let isoStr = null;
-
-    if(postDateTime !== null) {
-      posttimestamp = parseInt(postDateTime, 10);
-      schTs = new Date(posttimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
-      isoStr = schTs.toISOString();
-    }
-
-    let endtimestamp = null;
-    let endTs = null;
-    let endisoStr = null;
-
-    if(endDateTime !== null) {
-      endtimestamp = parseInt(endDateTime, 10);
-      endTs = new Date(endtimestamp * 1000); // multiply by 1000 to convert seconds to milliseconds
-      endisoStr = endTs.toISOString();
-    }
 
     if (
         !question
@@ -4451,7 +4338,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         blocks: blocks,
         text: `Poll : ${question}`,
       };
-      const postRes = await postChat(response_url, 'post', mRequestBody);
+      const postRes = await postChat((forceNotUsingResponseURL?"":response_url), 'post', mRequestBody);
       //console.log(postRes.slack_response);
       if (postRes.status === false) {
         let ackErr = {
@@ -4478,6 +4365,13 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         }
 
         return;
+      } else {
+        //update slack_ts
+        //slack_ts will be null if response_url is use!
+        await pollCol.updateOne(
+            { _id: new ObjectId(pollID)},
+            { $set: { ts: postRes.slack_ts } }
+        );
       }
     } else {
       //schedule
@@ -4650,7 +4544,7 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
   };
 
   let isScheduleEndActive = false;
-  if(endDateTime!== null) isScheduleEndActive = true
+  if( endDateTime!== null && endDateTime!== undefined ) isScheduleEndActive = true
   const pollData = {
     team: teamOrEntId,
     channel,
