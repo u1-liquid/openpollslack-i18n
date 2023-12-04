@@ -585,25 +585,7 @@ const checkAndExecuteTasks = async () => {
 
     for (const poll of closingTasks) {
       logger.debug(`[closingTasks] closing poll_id: ${poll._id}.`);
-
-      //get msg block
-
-      //update closedCol
-      // await closedCol.updateOne({
-      //   channel,
-      //   ts: message.ts,
-      // }, {
-      //   $set: { closed: true }
-      // });
-
-      //update poll
-
-
-      await pollCol.updateOne(
-          { _id: poll._id },
-          { $set: { schedule_end_active: false } }
-      );
-
+      closePollById(poll._id);
     }
 
   } catch (e) {
@@ -5694,6 +5676,77 @@ async function deletePollConfirm(body, context, value) {
 
 }
 
+async function closePollById(poll_id) {
+  let menuAtIndex = 0;
+  try {
+    let pollData = await pollCol.findOne({ _id: new ObjectId(poll_id)  });
+    if (!pollData) {
+      logger.warn(`Invalid poll_id ${poll_id} on closePollById`);
+      return false;
+    }
+
+    if(pollData.hasOwnProperty('team') &&
+        pollData.hasOwnProperty('channel') &&
+        pollData.hasOwnProperty('user_id') &&
+        pollData.hasOwnProperty('ts')
+    ) {
+      if(!pollData.team || !pollData.channel || !pollData.user_id | !pollData.ts ) {
+        logger.warn(`Cannot close poll_id ${poll_id} on closePollById due to incomplete data `);
+        return false;
+      }
+      //this req conversations.history and *:history scope to read message
+      // Retrieve the original message
+      try {
+        //TODO: closePoll update and send it back here
+        // this will not work until slack approve *:history scope for app
+        await pollCol.updateOne(
+            { _id: pollData._id },
+            { $set: { schedule_end_active: false } }
+        );
+
+        return false;
+        const result = await app.client.conversations.history({
+          channel: pollData.channel,
+          latest: pollData.ts,
+          limit: 1,
+          inclusive: true
+        });
+
+        const originalMessageBlocks = result.messages[0].blocks;
+
+
+        //update closedCol
+        // await closedCol.updateOne({
+        //   channel,
+        //   ts: message.ts,
+        // }, {
+        //   $set: { closed: true }
+        // });
+
+        //update poll
+
+
+      } catch (e) {
+        logger.warn(`Cannot close poll_id ${poll_id} , failed to call app.client.conversations.history `);
+        logger.warn(e);
+        logger.warn(e.toString() + "\n" + e.stack);
+        return false;
+      }
+
+    } else {
+      logger.warn(`Cannot close poll_id ${poll_id} on closePollById due to incomplete data `);
+    }
+
+  } catch (e) {
+    logger.error(`UNEXPECTED ERROR in closePollById`);
+    logger.error(e);
+    logger.error(e.toString() + "\n" + e.stack);
+    console.log(e);
+    console.trace();
+    return false;
+  }
+
+}
 async function closePoll(body, client, context, value) {
   let menuAtIndex = 0;
   const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
@@ -6189,4 +6242,20 @@ function toBoolean(value) {
 
 function getSupportDoubleQuoteToStr() {
   return acceptedQuotes.map(item => `\`${item}\``).join(' ');
+}
+
+//hasNestedProperty(objData, 'key1.key2.key3')
+function hasNestedProperty(obj, propertyPath) {
+  let properties = propertyPath.split('.');
+  let currentObject = obj;
+
+  for (let i = 0; i < properties.length; i++) {
+    let property = properties[i];
+    if (!currentObject || !currentObject.hasOwnProperty(property)) {
+      return false;
+    }
+    currentObject = currentObject[property];
+  }
+
+  return true;
 }
