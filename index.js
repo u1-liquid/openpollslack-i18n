@@ -5406,14 +5406,17 @@ async function revealOrHideVotes(body, context, value) {
   if(teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
   if(value.hasOwnProperty("mte")) isMenuAtTheEnd = toBoolean(value.mte);
+  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = toBoolean(value.z_mat);
   else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
 
   let isCompactUI = gIsCompactUI;
   if(value.hasOwnProperty("cui")) isCompactUI = toBoolean(value.cui);
+  if(value.hasOwnProperty("z_cp")) isCompactUI = toBoolean(value.z_cp);
   else if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
 
   let isShowDivider = gIsShowDivider;
   if(value.hasOwnProperty("sdv")) isShowDivider = toBoolean(value.sdv);
+  if(value.hasOwnProperty("z_div")) isShowDivider = toBoolean(value.z_div);
   else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
   if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
   if (
@@ -5805,6 +5808,7 @@ async function closePoll(body, client, context, value) {
 
   let isMenuAtTheEnd = gIsMenuAtTheEnd;
   if(value.hasOwnProperty("mte")) isMenuAtTheEnd = toBoolean(value.mte);
+  if(value.hasOwnProperty("z_mat")) isMenuAtTheEnd = toBoolean(value.z_mat);
   else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
 
   if(isMenuAtTheEnd) menuAtIndex = body.message.blocks.length-1;
