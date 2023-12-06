@@ -115,12 +115,20 @@ For `\ ` escaped with `\\`
 ```
 
 ### Simple Schedule Poll
+Schedule post
 ```
 /poll on 2023-11-15T10:30:00+07:00 "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
+Schedule post and close
+```
+/poll on 2023-11-15T10:30:00+07:00 end 2023-11-30T00:00:00+07:00 "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
+```
 - Time stamp should be in ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ`
+- If an end time is set, it will attempt to close the poll at that time once. If the owner re-opens it, the scheduled close will not run again.
 
 ### Advanced Schedule/Recurring Poll
+For advanced recurring polls, please use a simple poll as a template and then use the `POLL_ID` of that poll in the `/poll schedule` command. If you don't want any members to see or respond to your template poll, you can create it in an empty private channel and specify the `CH_ID` in the schedule command.
+
 Schedule a poll that create by yourself:
 ```
 /poll schedule create [POLL_ID] [TS] [CH_ID] "[CRON_EXP]" [MAX_RUN]

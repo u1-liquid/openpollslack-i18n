@@ -403,7 +403,7 @@ const checkAndExecuteTasks = async () => {
 
 
           const pollView = (await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
-              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.schedule_end_ts, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task_schedule",task.poll_id,cmdNote));
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.schedule_end_ts, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task_schedule",task.poll_id,cmdNote,false,null));
           const blocks = pollView?.blocks;
           const pollID = pollView?.poll_id;
 
@@ -1180,7 +1180,10 @@ function createHelpBlock(appLang) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "```/"+slackCommand+" on 2023-11-15T10:30:00+07:00 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"```",
+        text: "Schedule poll\n" +
+            "```/"+slackCommand+" on 2023-11-15T10:30:00+07:00 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"```\n" +
+            "Schedule poll with schedule close poll\n" +
+            "```/"+slackCommand+" on 2023-11-15T10:30:00+07:00 end 2023-11-30T00:00:00+07:00 \"What's your favourite color ?\" \"Red\" \"Green\" \"Blue\" \"Yellow\"```",
       },
     },
 
@@ -1265,21 +1268,10 @@ function createHelpBlock(appLang) {
       },
     },
     {
-      type: "divider",
-    },
-    {
-      type: "header",
-      text: {
-        type: "plain_text",
-        text: "Limitations",
-        emoji: true,
-      },
-    },
-    {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "Slack have limitations and that include \"message length\". So you can't have more than 15 options per poll. You can create multiple polls if you want more options",
+        text: "*Limitations*\nSlack have limitations and that include \"message length\". So you can't have more than 15 options per poll. You can create multiple polls if you want more options",
       },
     },
     {
@@ -2424,7 +2416,7 @@ async function processCommand(ack, body, client, command, context, say, respond)
         }
       }
 
-      const pollView = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, fullCmd, "cmd", null, null));
+      const pollView = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, fullCmd, "cmd", null, null,false,null));
       const blocks = pollView?.blocks;
       const pollID = pollView?.poll_id;
       if (null === blocks) {
@@ -2727,7 +2719,7 @@ app.action('btn_del_choice', async ({ action, ack, body, client, context }) => {
 app.action('btn_vote', async ({ action, ack, body, context }) => {
   try {
     await ack();
-    let menuAtIndex = 0;
+    //let menuAtIndex = 0;
     const teamConfig = await getTeamOverride(getTeamOrEnterpriseId(body));
 
     if (
@@ -2784,7 +2776,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
     else if (teamConfig.hasOwnProperty("show_divider")) isShowDivider = teamConfig.show_divider;
 
 
-    if (isMenuAtTheEnd) menuAtIndex = body.message.blocks.length - 1;
+    // if (isMenuAtTheEnd) menuAtIndex = body.message.blocks.length - 1;
 
     if (!mutexes.hasOwnProperty(`${message.team}/${channel}/${message.ts}`)) {
       mutexes[`${message.team}/${channel}/${message.ts}`] = new Mutex();
@@ -2873,11 +2865,11 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
             },
         )
 
-        let button_id = 3 + (value.id * 2);
-        let context_id = 3 + (value.id * 2) + 1;
-        let blockBtn = blocks[button_id];
-        let block = blocks[context_id];
-        let voters = value.voters ? value.voters : [];
+        // let button_id = 3 + (value.id * 2);
+        // let context_id = 3 + (value.id * 2) + 1;
+        // let blockBtn = blocks[button_id];
+        // let block = blocks[context_id];
+        // let voters = value.voters ? value.voters : [];
 
 
         if (poll[value.id].includes(user_id)) {
@@ -2919,75 +2911,7 @@ app.action('btn_vote', async ({ action, ack, body, context }) => {
           poll[value.id].push(user_id);
         }
 
-        for (const i in blocks) {
-          let b = blocks[i];
-          if (
-              b.hasOwnProperty('accessory')
-              && b.accessory.hasOwnProperty('value')
-          ) {
-            let val = JSON.parse(b.accessory.value);
-            if (!val.hasOwnProperty('voters')) {
-              val.voters = [];
-            }
-
-            if (!poll.hasOwnProperty(val.id)) {
-              poll[val.id] = [];
-            }
-
-            val.voters = poll[val.id];
-            let newVoters = '';
-
-            if (isHidden) {
-              newVoters = stri18n(userLang, 'info_wait_reveal');
-            } else if (poll[val.id].length === 0) {
-              newVoters = stri18n(userLang, 'info_no_vote');
-            } else {
-              newVoters = '';
-              for (const voter of poll[val.id]) {
-                if (!val.anonymous) {
-                  newVoters += `<@${voter}> `;
-                }
-              }
-
-              newVoters += poll[val.id].length + ' ';
-              if (poll[val.id].length === 1) {
-                newVoters += 'vote';
-              } else {
-                newVoters += 'votes';
-              }
-            }
-
-            blocks[i].accessory.value = JSON.stringify(val);
-            if (!isCompactUI) {
-              const nextI = '' + (parseInt(i) + 1);
-              if (blocks[nextI].hasOwnProperty('elements')) {
-                blocks[nextI].elements[0].text = newVoters;
-              }
-            } else {
-              let choiceNL = blocks[i].text.text.indexOf('\n');
-              if (choiceNL === -1) choiceNL = blocks[i].text.text.length;
-              const choiceText = blocks[i].text.text.substring(0, choiceNL);
-              blocks[i].text.text = `${choiceText}\n${newVoters}`;
-            }
-          }
-        }
-
-        const infosIndex = blocks.findIndex(el => el.type === 'context' && el.elements)
-        blocks[infosIndex].elements = await buildInfosBlocks(
-            blocks,
-            {
-              team: message.team,
-              channel,
-              ts: message.ts,
-            },
-            userLang
-        );
-        blocks[menuAtIndex].accessory.option_groups[0].options =
-            await buildMenu(blocks, {
-              team: message.team,
-              channel,
-              ts: message.ts,
-            }, userLang, isMenuAtTheEnd);
+        blocks = await updateVoteBlock(message.team,channel,message.ts,blocks,poll,userLang,isHidden,isCompactUI,isMenuAtTheEnd);
 
         await votesCol.updateOne({
           channel,
@@ -4310,7 +4234,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       return;
     }
 
-    const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, cmd, cmd_via, null, null);
+    const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, cmd, cmd_via, null, null,false,null);
     const blocks = pollView.blocks;
     const pollID = pollView.poll_id;
     if (postDateTime === null) {
@@ -4497,7 +4421,7 @@ function createCmdFromInfos(question, options, isAnonymous, isLimited, limit, is
   return cmd;
 }
 
-async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endDateTime, userLang, userId, cmd,cmd_via,cmd_via_ref,cmd_via_note) {
+async function createPollView(teamOrEntId,channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endDateTime, userLang, userId, cmd,cmd_via,cmd_via_ref,cmd_via_note,is_update,exist_poll_id) {
   if (
     !question
     || !options
@@ -4544,12 +4468,15 @@ async function createPollView(teamOrEntId,channel, question, options, isAnonymou
     para: button_value
   };
 
-  await pollCol.insertOne(pollData);
+  let pollID = exist_poll_id;
+  if(!is_update) {
+    await pollCol.insertOne(pollData);
+    pollID = pollData._id;
 
-  const pollID = pollData._id;
-  logger.verbose(`[${cmd_via}] New Poll:${pollID} ${cmd_via_note}`);
-  //logger.debug(pollData)
-  logger.debug(`Poll CMD:${cmd}`);
+    logger.verbose(`[${cmd_via}] New Poll:${pollID} ${cmd_via_note}`);
+    //logger.debug(pollData)
+    logger.debug(`Poll CMD:${cmd}`);
+  }
 
   button_value.poll_id = pollID;
 
@@ -5679,64 +5606,178 @@ async function deletePollConfirm(body, context, value) {
 async function closePollById(poll_id) {
   let menuAtIndex = 0;
   try {
-    let pollData = await pollCol.findOne({ _id: new ObjectId(poll_id)  });
+    let pollData = await pollCol.findOne({_id: new ObjectId(poll_id)});
     if (!pollData) {
       logger.warn(`Invalid poll_id ${poll_id} on closePollById`);
       return false;
     }
-
-    if(pollData.hasOwnProperty('team') &&
+    logger.verbose(`[Schedule_close] poll_id: ${poll_id}`);
+    if (pollData.hasOwnProperty('team') &&
         pollData.hasOwnProperty('channel') &&
         pollData.hasOwnProperty('user_id') &&
         pollData.hasOwnProperty('ts')
     ) {
-      if(!pollData.team || !pollData.channel || !pollData.user_id | !pollData.ts ) {
+      if (!pollData.team || !pollData.channel || !pollData.user_id | !pollData.ts) {
         logger.warn(`Cannot close poll_id ${poll_id} on closePollById due to incomplete data `);
-        return false;
-      }
-      //this req conversations.history and *:history scope to read message
-      // Retrieve the original message
-      try {
-        //TODO: closePoll update and send it back here
-        // this will not work until slack approve *:history scope for app
         await pollCol.updateOne(
-            { _id: pollData._id },
-            { $set: { schedule_end_active: false } }
+            {_id: pollData._id},
+            {$set: {schedule_end_active: false}}
         );
-
-        return false;
-        const result = await app.client.conversations.history({
-          channel: pollData.channel,
-          latest: pollData.ts,
-          limit: 1,
-          inclusive: true
-        });
-
-        const originalMessageBlocks = result.messages[0].blocks;
-
-
-        //update closedCol
-        // await closedCol.updateOne({
-        //   channel,
-        //   ts: message.ts,
-        // }, {
-        //   $set: { closed: true }
-        // });
-
-        //update poll
-
-
-      } catch (e) {
-        logger.warn(`Cannot close poll_id ${poll_id} , failed to call app.client.conversations.history `);
-        logger.warn(e);
-        logger.warn(e.toString() + "\n" + e.stack);
         return false;
       }
+
+      const teamConfig = await getTeamOverride(pollData.team);
+
+      //get info from exist poll
+      let userLang = null;
+      if (pollData.para?.hasOwnProperty('user_lang'))
+        if (pollData.para?.user_lang !== "" && pollData.para?.user_lang != null)
+          userLang = pollData.para?.user_lang;
+
+      let isAnonymous = false;
+      if (pollData.para?.hasOwnProperty('anonymous'))
+        if (pollData.para?.anonymous !== "" && pollData.para?.anonymous != null)
+          isAnonymous = pollData.para?.anonymous;
+
+      if (userLang == null) {
+        userLang = gAppLang;
+        if (teamConfig.hasOwnProperty("app_lang")) userLang = teamConfig.app_lang;
+      }
+
+      let isMenuAtTheEnd = gIsMenuAtTheEnd;
+      if (pollData.para?.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = pollData.para?.menu_at_the_end;
+      else if (teamConfig.hasOwnProperty("menu_at_the_end")) isMenuAtTheEnd = teamConfig.menu_at_the_end;
+
+      let isCompactUI = gIsCompactUI;
+      if (pollData.para?.hasOwnProperty("compact_ui")) isCompactUI = pollData.para?.compact_ui;
+      else if (teamConfig.hasOwnProperty("compact_ui")) isCompactUI = teamConfig.compact_ui;
+
+
+      //this req conversations.history and *:history scope to read message Retrieve the original message
+      //Or just recreate whole thing.
+      if (!mutexes.hasOwnProperty(`${pollData.team}/${pollData.channel}/${pollData.ts}`)) {
+        mutexes[`${pollData.team}/${pollData.channel}/${pollData.ts}`] = new Mutex();
+      }
+
+      let release = null;
+      let countTry = 0;
+      do {
+        ++countTry;
+
+        try {
+          release = await mutexes[`${pollData.team}/${pollData.channel}/${pollData.ts}`].acquire();
+        } catch (e) {
+          logger.info(`[Try #${countTry}] Error while attempt to acquire mutex lock.`, e)
+        }
+      } while (!release && countTry < 3);
+
+      if (release) {
+        try {
+          let mBotToken = null;
+          const teamInfo = await getTeamInfo(pollData.team);
+          if (teamInfo?.bot?.token !== undefined) {
+            mBotToken = teamInfo.bot.token;
+          } else {
+            logger.warn(`[Schedule_close] poll_id: ${poll_id}: Unable to get valid bot token.`);
+            await pollCol.updateOne(
+                {_id: pollData._id},
+                {$set: {schedule_end_active: false}}
+            );
+            return false;
+          }
+
+          const pollView = (await createPollView(pollData.team, pollData.channel, pollData.question, pollData.options, pollData.para?.anonymous ?? false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
+              pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.schedule_end_ts, pollData.para?.user_lang, pollData.user_id, pollData.cmd, pollData.cmd_via, pollData.cmd_via_ref, pollData.cmd_via_note,
+              true,pollData._id));
+          let blocks = pollView?.blocks;
+          const pollID = pollView?.poll_id;
+
+          if (null === blocks) {
+            const errMsg = `[Schedule_close] Failed to recreate poll ch:${pollData.channel} ID:${pollID} CMD:${pollData.cmd}`;
+            logger.warn(errMsg);
+            await pollCol.updateOne(
+                {_id: pollData._id},
+                {$set: {schedule_end_active: false}}
+            );
+            return false;
+          }
+
+          //mark schedule_end_active false
+          await pollCol.updateOne(
+              {_id: pollData._id},
+              {$set: {schedule_end_active: false}}
+          );
+
+          //close it
+          await closedCol.updateOne({
+            channel: pollData.channel,
+            ts: pollData.ts,
+          }, {
+            $setOnInsert: { team: pollData.team },
+            $set: { closed: true }
+          }, {
+            upsert: true
+          });
+
+          //rebuild vote block
+          let poll = null;
+          const data = await votesCol.findOne({channel: pollData.channel, ts: pollData.ts});
+          if (data === null) {
+            await votesCol.insertOne({
+              team: pollData.team,
+              channel:pollData.channel,
+              ts: pollData.ts,
+              poll_id: poll_id,
+              votes: {},
+            });
+            poll = {};
+          } else {
+            poll = data.votes;
+          }
+
+          const isHidden = await getInfos(
+              'hidden',
+              blocks,
+              {
+                team: pollData.team,
+                channel: pollData.channel,
+                ts: pollData.ts,
+              },
+          )
+
+          blocks = await updateVoteBlock(pollData.team,pollData.channel,pollData.ts,blocks,poll,userLang,isHidden,isCompactUI,isMenuAtTheEnd);
+
+          let mRequestBody = {
+            token: mBotToken,
+            channel: pollData.channel,
+            ts: pollData.ts,
+            blocks: blocks,
+            text: `Poll : ${pollData.question}`,
+          };
+          const postRes = await postChat("", 'update', mRequestBody);
+          if (postRes.status === false) {
+            logger.warn("[Schedule_close] Failed to update poll data.");
+            logger.warn(postRes);
+            //continue;
+          }
+
+        } catch (e) {
+          logger.warn(`Cannot close poll_id ${poll_id}  `);
+          logger.warn(e);
+          logger.warn(e.toString() + "\n" + e.stack);
+          return false;
+        } finally {
+          release();
+        }
+      }//end on release
 
     } else {
       logger.warn(`Cannot close poll_id ${poll_id} on closePollById due to incomplete data `);
+      await pollCol.updateOne(
+          {_id: pollData._id},
+          {$set: {schedule_end_active: false}}
+      );
     }
-
   } catch (e) {
     logger.error(`UNEXPECTED ERROR in closePollById`);
     logger.error(e);
@@ -6156,6 +6197,88 @@ function buildVoteBlock(btn_value, option_text, isCompactUI, isShowDivider, isSh
   return block;
 }
 
+async function updateVoteBlock(team,channel,ts,blocks,poll,userLang,isHidden,isCompactUI,isMenuAtTheEnd) {
+  let menuAtIndex = 0;
+  if (isMenuAtTheEnd) menuAtIndex = blocks.length - 1;
+
+  // let button_id = 3 + (value.id * 2);
+  // let context_id = 3 + (value.id * 2) + 1;
+  // let blockBtn = blocks[button_id];
+  // let block = blocks[context_id];
+  // let voters = value.voters ? value.voters : [];
+
+  for (const i in blocks) {
+    let b = blocks[i];
+    if (
+        b.hasOwnProperty('accessory')
+        && b.accessory.hasOwnProperty('value')
+    ) {
+      let val = JSON.parse(b.accessory.value);
+      if (!val.hasOwnProperty('voters')) {
+        val.voters = [];
+      }
+
+      if (!poll.hasOwnProperty(val.id)) {
+        poll[val.id] = [];
+      }
+
+      val.voters = poll[val.id];
+      let newVoters = '';
+
+      if (isHidden) {
+        newVoters = stri18n(userLang, 'info_wait_reveal');
+      } else if (poll[val.id].length === 0) {
+        newVoters = stri18n(userLang, 'info_no_vote');
+      } else {
+        newVoters = '';
+        for (const voter of poll[val.id]) {
+          if (!val.anonymous) {
+            newVoters += `<@${voter}> `;
+          }
+        }
+
+        newVoters += poll[val.id].length + ' ';
+        if (poll[val.id].length === 1) {
+          newVoters += 'vote';
+        } else {
+          newVoters += 'votes';
+        }
+      }
+
+      blocks[i].accessory.value = JSON.stringify(val);
+      if (!isCompactUI) {
+        const nextI = '' + (parseInt(i) + 1);
+        if (blocks[nextI].hasOwnProperty('elements')) {
+          blocks[nextI].elements[0].text = newVoters;
+        }
+      } else {
+        let choiceNL = blocks[i].text.text.indexOf('\n');
+        if (choiceNL === -1) choiceNL = blocks[i].text.text.length;
+        const choiceText = blocks[i].text.text.substring(0, choiceNL);
+        blocks[i].text.text = `${choiceText}\n${newVoters}`;
+      }
+    }
+  }
+
+  const infosIndex = blocks.findIndex(el => el.type === 'context' && el.elements)
+  blocks[infosIndex].elements = await buildInfosBlocks(
+      blocks,
+      {
+        team: team,
+        channel,
+        ts: ts,
+      },
+      userLang
+  );
+  blocks[menuAtIndex].accessory.option_groups[0].options =
+      await buildMenu(blocks, {
+        team: team,
+        channel,
+        ts: ts,
+      }, userLang, isMenuAtTheEnd);
+
+  return blocks;
+}
 
 function isValidISO8601(inputTS) {
   // Regular expression to check ISO 8601 format
