@@ -3990,6 +3990,9 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     let postDateTime = null;
     let endDateTime = null;
     if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+    let isAppAllowDM = gAppAllowDM;
+    if (teamConfig.hasOwnProperty("app_allow_dm")) isAppAllowDM = teamConfig.app_allow_dm;
+
     const privateMetadata = JSON.parse(view.private_metadata);
     const userId = body.user.id;
 
@@ -4219,16 +4222,18 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       ackErr.errors[elementToAlert] = parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices});
       await ack(ackErr);
 
-      try {
-        let mRequestBody = {
-          token: context.botToken,
-          channel: userId,
-          text: `\`\`\`${cmd}\`\`\`\n` + parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices}),
-        };
-        await postChat("", 'post', mRequestBody);
-      } catch (e) {
-        //not able to dm user
-        console.log(e);
+      if(isAppAllowDM) {
+        try {
+          let mRequestBody = {
+            token: context.botToken,
+            channel: userId,
+            text: `\`\`\`${cmd}\`\`\`\n` + parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices}),
+          };
+          await postChat("", 'post', mRequestBody);
+        } catch (e) {
+          //not able to dm user
+          console.log(e);
+        }
       }
 
       return;
@@ -4255,19 +4260,21 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         ackErr.errors[elementToAlert] = `Error while create poll:${postRes.message}`;
         await ack(ackErr);
 
-        try {
-          let mRequestBody = {
-            token: context.botToken,
-            channel: userId,
-            text: `Error while create poll: \`\`\`${cmd}\`\`\` \nERROR:${postRes.message}`
-          };
-          await postChat(response_url, 'post', mRequestBody);
-        } catch (e) {
-          //not able to dm user
-          console.log("not able to dm user");
-          console.log(postRes);
-          console.trace();
-          console.log(e);
+        if(isAppAllowDM) {
+          try {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: userId,
+              text: `Error while create poll: \`\`\`${cmd}\`\`\` \nERROR:${postRes.message}`
+            };
+            await postChat(response_url, 'post', mRequestBody);
+          } catch (e) {
+            //not able to dm user
+            console.log("not able to dm user");
+            console.log(postRes);
+            console.trace();
+            console.log(e);
+          }
         }
 
         return;
