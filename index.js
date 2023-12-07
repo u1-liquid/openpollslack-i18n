@@ -286,8 +286,8 @@ function calculateNextScheduleTime(cronString,timeZoneString) {
     const interval = cronParser.parseExpression(cronString,options);
     return interval.next().toDate();
   } catch (e) {
-    console.log(e);
-    logger.debug(e.toString()+"\n"+e.stack);
+    //console.log(e);
+    //logger.debug(e.toString()+"\n"+e.stack);
     return null;
   }
 }
@@ -1680,6 +1680,7 @@ async function processCommand(ack, body, client, command, context, say, respond)
                 const nextScheduleTime = calculateNextScheduleTime(inputPara, null);
 
                 if (!nextScheduleTime) {
+                  logger.debug(`Command reject: Cron Expression is invalid [${inputPara}] `)
                   let mRequestBody = {
                     token: context.botToken,
                     channel: channel,
