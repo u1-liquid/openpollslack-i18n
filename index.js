@@ -390,18 +390,6 @@ const checkAndExecuteTasks = async () => {
 
         logger.verbose(`[Schedule] Executing task for poll_id: ${task.poll_id} to CH:${pollCh} ${cmdNote}`);
         try {
-          // let mRequestBody = {
-          //   token: mBotToken,
-          //   channel: pollCh,
-          //   //blocks: blocks,
-          //   text: `TEST TASK ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`
-          //   ,
-          // };
-          // //logger.debug(mRequestBody);
-          // await postChat("",'post',mRequestBody);
-          ///////////////
-
-
           const pollView = (await createPollView(pollData.team, pollCh, pollData.question, pollData.options, pollData.para?.anonymous??false, pollData.para?.limited, pollData.para?.limit, pollData.para?.hidden, pollData.para?.user_add_choice,
               pollData.para?.menu_at_the_end, pollData.para?.compact_ui, pollData.para?.show_divider, pollData.para?.show_help_link, pollData.para?.show_command_info, pollData.para?.true_anonymous, pollData.para?.add_number_emoji_to_choice, pollData.para?.add_number_emoji_to_choice_btn, pollData.schedule_end_ts, pollData.para?.user_lang, task.created_user_id, pollData.cmd,"task_schedule",task.poll_id,cmdNote,false,null));
           const blocks = pollView?.blocks;
@@ -1002,7 +990,7 @@ function createHelpBlock(appLang) {
       type: "header",
       text: {
         type: "plain_text",
-        text: "Options",
+        text: "Command Options",
         emoji: true,
       },
     },
@@ -1010,42 +998,19 @@ function createHelpBlock(appLang) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "The options are optionals settings to apply to the poll.\nDon't surround options with quotes.",
+        text: "The options are optional settings to apply to the poll. Do not surround options with quotes.",
       },
     },
     {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "*Anonymous*\n`anonymous` inside command.\nThis option allow you to hide voters.",
-      },
-    },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: "*Limited choices*\n`limit x` inside command. Replace \"x\" by desired number.\nThis option limit maximum choice for each users. If \"2\", each user can only select 2 choices.",
-      },
-    },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: "*Hidden*\n`hidden` inside command.\nThis option hide the number of votes for each choice. You can reveal votes with a button at bottom of poll. Only the creator can reveal votes.",
-      },
-    },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: "*Allow choices from others*\n`add-choice` inside command.\nThis option allow other member to add more choice to this poll.",
-      },
-    },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: "*Schedule a poll*\n`on TIME_STAMP` inside command.\nReplace \"TIME_STAMP\" with Time stamp in ISO8601 format `YYYY-MM-DDTHH:mm:ss.sssZ` ",
+        text: "`anonymous` - Make vote anonymous.\n" +
+            "`limit x` - Limit the maximum number of choices each user can vote for to `x` choices.\n" +
+            "`hidden` - Vote results will be hidden until revealed.\n" +
+            "`add-choice` - Allow other members to add more choices to this poll.\n" +
+            "`on TIME_STAMP` - Schedule a poll to be posted on TIME_STAMP.\n" +
+            "`end TIME_STAMP` - Schedule a poll to be closed on TIME_STAMP.\n",
       },
     },
     {
@@ -1264,7 +1229,7 @@ function createHelpBlock(appLang) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "*Private channel*\nTo create poll in private channels, please use `/"+slackCommand+"` command. If you using Shortcut or Schedule you need to invite the bot inside with `/invite` command.",
+        text: "*Private channel & schedule poll*\nTo create poll in private channels, please use `/"+slackCommand+"` command. If you using Shortcut or Schedule you need to invite the bot inside with `/invite` command.",
       },
     },
     {
