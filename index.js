@@ -958,7 +958,9 @@ function createHelpBlock(appLang) {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: "*From command*\nJust type `/"+slackCommand+"` where you type the message and press Enter without any options. A modal dialog will pop up and guide you to create one.\n\nIf you want to create one with single line of command, please add options, question and your choices. For both question and your choices please surround it with \"quotes\"",
+        text: "*From command*\nJust type `/"+slackCommand+"` where you type the message and press Enter without any options. A modal dialog will pop up and guide you to create one.\n\nIf you want to create one with single line of command, please add options, question and your choices.\n" +
+            "   - For both the question and your choices, please surround them with  \"quotes\"\n" +
+            "   - For options, DO NOT surround them with quotes unless specified.",
       },
     },
     {
@@ -1010,7 +1012,8 @@ function createHelpBlock(appLang) {
             "`hidden` - Vote results will be hidden until revealed.\n" +
             "`add-choice` - Allow other members to add more choices to this poll.\n" +
             "`on TIME_STAMP` - Schedule a poll to be posted on TIME_STAMP.\n" +
-            "`end TIME_STAMP` - Schedule a poll to be closed on TIME_STAMP.\n",
+            "`end TIME_STAMP` - Schedule a poll to be closed on TIME_STAMP.\n" +
+            "   - TIME_STAMP in ISO8601 format eg. `YYYY-MM-DDTHH:mm:ss.sssZ`",
       },
     },
     {

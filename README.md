@@ -61,12 +61,12 @@ Just type `/poll` (without any options) in the channel that you want to post!
 /poll "What's your favourite color ?" "Red" "Green" "Blue" "Yellow"
 ```
 
-For both question and choices, feel free to use Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` ``
-
-If you have "Double Quotation" in your question or choices, escaped quotes it with `\"`.
+- For both the question and your choices, please surround them with "quotes"
+- For options, DO NOT surround them with quotes unless specified.
+- If you have "Double Quotation" in your question or choices, escaped quotes it with `\"`.
 (Supported double quote:  `"` `“` `”` `‟` `„` `〝` `〞` `〟`)
-
-For `\ ` escaped with `\\`
+- For `\ ` escaped with `\\`
+- You can use @mention and Slack's emoji 😀 🤩 🤗 , `*bold*` `~strike~` `_italics_` and `` `code` `` in question and choices
 ```
 /poll "Please select \"HELLO\" ?" "HELLO" "HELlo" "helLo" "HE\"LL\"O"
 ```
