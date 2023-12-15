@@ -1,6 +1,6 @@
 {
   "name": "openpoll",
-  "version": "4.0.0.2",
+  "version": "4.0.0.3",
   "description": "Open source poll slack app",
   "main": "index.js",
   "scripts": {
@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/polppol/openpollslack-i18n#readme",
   "dependencies": {
-    "@slack/bolt": "^3.14.0",
+    "@slack/bolt": "^3.16.0",
     "async-mutex": "^0.4.0",
     "body-parser": "^1.20.2",
     "cli-progress": "^3.12.0",
