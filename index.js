@@ -54,7 +54,9 @@ const gIsShowNumberInChoice = config.get('add_number_emoji_to_choice');
 const gIsShowNumberInChoiceBtn = config.get('add_number_emoji_to_choice_btn');
 const gIsDeleteDataOnRequest = config.get('delete_data_on_poll_delete');
 const gLogLevelApp = config.get('log_level_app');
+const gLogLevelAppFile = config.get('log_level_app_file');
 const gLogLevelBolt = config.get('log_level_bolt');
+const gLogLevelBoltFile = config.get('log_level_bolt_file');
 const gLogToFile = config.get('log_to_file');
 const gScheduleLimitHr = config.get('schedule_limit_hrs');
 const gScheduleMaxRun = config.get('schedule_max_run');
@@ -187,7 +189,7 @@ if (gLogToFile) {
 }
 
 const logger = createLogger({
-  level: gLogLevelApp,
+  level: gLogLevelAppFile,
   format: format.combine(
       format.timestamp({
         format: 'YYYY-MM-DD HH:mm:ss'
@@ -198,7 +200,7 @@ const logger = createLogger({
 });
 
 const loggerBolt = createLogger({
-  level: gLogLevelApp,
+  level: gLogLevelBoltFile,
   format: format.combine(
       format.timestamp({
         format: 'YYYY-MM-DD HH:mm:ss'
@@ -395,7 +397,7 @@ const checkAndExecuteTasks = async () => {
           const blocks = pollView?.blocks;
           const pollID = pollView?.poll_id;
 
-          if (null === blocks) {
+          if (null === pollView || null === blocks) {
             errMsg = `[Schedule] Failed to create poll ch:${pollData.channel} ID:${task.poll_id} CMD:${pollData.cmd}`;
             dmOwnerString = errMsg;
             logger.warn(errMsg);
@@ -2388,7 +2390,7 @@ async function processCommand(ack, body, client, command, context, say, respond)
       const pollView = (await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, fullCmd, "cmd", null, null,false,null));
       const blocks = pollView?.blocks;
       const pollID = pollView?.poll_id;
-      if (null === blocks) {
+      if (null === pollView || null === blocks) {
         let mRequestBody = {
           token: context.botToken,
           channel: channel,
@@ -4211,6 +4213,18 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     const pollView = await createPollView(teamOrEntId, channel, question, options, isAnonymous, isLimited, limit, isHidden, isAllowUserAddChoice, isMenuAtTheEnd, isCompactUI, isShowDivider, isShowHelpLink, isShowCommandInfo, isTrueAnonymous, isShowNumberInChoice, isShowNumberInChoiceBtn, endTs, userLang, userId, cmd, cmd_via, null, null,false,null);
     const blocks = pollView.blocks;
     const pollID = pollView.poll_id;
+
+    if (null === pollView || null === blocks) {
+      let ackErr = {
+        response_action: 'errors',
+        errors: {
+        },
+      };
+      ackErr.errors[elementToAlert] = `Error while create poll: Invalid input data`;
+      await ack(ackErr);
+      return;
+    }
+
     if (postDateTime === null) {
       let mRequestBody = {
         token: context.botToken,
@@ -5668,7 +5682,7 @@ async function closePollById(poll_id) {
           let blocks = pollView?.blocks;
           const pollID = pollView?.poll_id;
 
-          if (null === blocks) {
+          if (null === pollView || null === blocks) {
             const errMsg = `[Schedule_close] Failed to recreate poll ch:${pollData.channel} ID:${pollID} CMD:${pollData.cmd}`;
             logger.warn(errMsg);
             await pollCol.updateOne(

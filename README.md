@@ -248,8 +248,10 @@ Usage:
 - `show_command_info` if set to `false`; command that use to create poll will be removed (You still can see command in Menu)
 - `true_anonymous` if set to `true`; Poller will no longer see who voted which options if poll is anonymous, If this mode is disabled; `info_anonymous_notice` will show to let users know that poller can still see there votes
 - `delete_data_on_poll_delete` if set to `true`; When poller request to delete the poll, all data in database that refer to that poll will be deleted(schedule poll that refer to deleted poll also stop working). If you want to disable it please make sure if compliance with your policy.
-- `log_level_app` valid options are: `debug` `verbose` `info` `warn` `error`
-- `log_level_bolt` valid options are: `debug` `verbose` `info` `warn` `error`
+- `log_level_app` Log level of app(console); valid options are: `debug` `verbose` `info` `warn` `error`
+- `log_level_app_file` Log level of app(file); valid options are: `debug` `verbose` `info` `warn` `error`
+- `log_level_bolt` Log level of Bolt(console); valid options are: `debug` `verbose` `info` `warn` `error`
+- `log_level_bolt_file` Log level of Bolt(file); valid options are: `debug` `verbose` `info` `warn` `error`
 - `log_to_file` valid options are: `true` `false`
 - `log_dir` folder of log file
 - `schedule_limit_hrs` schedule will deny to re-run if schedule jobs is shorter than this number (hours)
