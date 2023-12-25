@@ -2279,30 +2279,6 @@ async function processCommand(ack, body, client, command, context, say, respond)
       }
 
       try {
-        //V1
-        // const regexp = new RegExp(firstSep+'[^'+firstSep+'\\\\]*(?:\\\\[\S\s][^'+lastSep+'\\\\]*)*'+lastSep, 'g');
-        // for (let option of cmdBody.match(regexp)) {
-        //   let opt = option.substring(1, option.length - 1);
-        //   if (question === null) {
-        //     question = opt;
-        //   } else {
-        //     options.push(opt);
-        //   }
-        // }
-
-        //V2
-        // const regexp = new RegExp(`${firstSep}(?:[^${firstSep}\\\\]|\\\\.)*${lastSep}`, 'g');
-        // const matches = cmdBody.match(regexp);
-        // if (matches) {
-        //   for (let option of matches) {
-        //     let opt = option.substring(1, option.length - 1).replace(/\\(["'])/g, "$1");
-        //     if (question === null) {
-        //       question = opt;
-        //     } else {
-        //       options.push(opt);
-        //     }
-        //   }
-        // }
 
         //V3
         // Build a regular expression that matches the standard double quote
