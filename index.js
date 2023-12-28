@@ -414,9 +414,20 @@ const checkAndExecuteTasks = async () => {
           let localizeTS = await getAndlocalizeTimeStamp(mBotToken,mTaskOwner,task.next_ts);
           if(postRes.status === false) {
             dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti_error'), {error:postRes.message,poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+
+            if(task.hasOwnProperty('next_error_disable_poll'))  {
+              if(task.next_error_disable_poll === true) {
+                await scheduleCol.updateOne(
+                    { _id: task._id },
+                    { $set: { is_enable: false } }
+                );
+                continue;
+              }
+            }
+
             await scheduleCol.updateOne(
                 { _id: task._id },
-                { $set: { last_error_ts: new Date(), last_error_text: postRes?.message} }
+                { $set: { last_error_ts: new Date(), last_error_text: postRes?.message, next_error_disable_poll: true } }
             );
             //continue;
           } else {
@@ -431,6 +442,12 @@ const checkAndExecuteTasks = async () => {
             } else {
               dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
             }
+
+            await scheduleCol.updateOne(
+                { _id: task._id },
+                { $set: { next_error_disable_poll: false  } }
+            );
+
           }
 
 
