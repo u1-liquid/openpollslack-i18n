@@ -2968,6 +2968,7 @@ app.action('add_choice_after_post', async ({ ack, body, action, context,client }
 
     const channel = body.channel.id;
 
+    if(!action.value) return;
     const value = action.value.trim();
 
     let poll_id = null;
@@ -4330,7 +4331,13 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         return;
       }
     }
-    if (!isAck) await ack();
+    if (!isAck) {
+      try {
+        await ack();
+      } catch (e) {
+
+      }
+    }
   } catch (e) {
     logger.error(`UNEXPECTED ERROR in modal_poll_submit :` + e.message);
     logger.error(e.toString() + "\n" + e.stack);
