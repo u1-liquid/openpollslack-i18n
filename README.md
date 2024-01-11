@@ -206,6 +206,16 @@ Delete all schedules that already finished, done, no longer valid, disabled
 It is not required to run `/poll schedule delete_done` as server will clear out unused schedules for you.
 if you host this by your self you can make change this in `schedule_auto_delete_invalid_day`
 
+## User config
+
+Read or set config for yourself (No user config avaliable at this time)
+Usage:
+```
+/poll user_config read
+/poll user_config write [config_name]
+/poll user_config reset
+```
+
 ## Team config (Override Server config)
 
 If some of your team would like to using different config than what is on default.json you can use `/poll config` .

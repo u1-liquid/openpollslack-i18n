@@ -1304,7 +1304,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
 
     if (event.tab === 'messages') {
 
-      const uConfig = await getUserConfig(teamOrEntId,event.user);
+      let uConfig = await getUserConfig(teamOrEntId,event.user);
     if(uConfig!==null && uConfig.flag?.hasOwnProperty("welcome_send") && uConfig.flag?.welcome_send === true) {
 
       } else {
@@ -1313,18 +1313,20 @@ app.event('app_home_opened', async ({ event, client, context }) => {
           channel: event.channel,
           text: parameterizedString(stri18n(appLang, 'info_welcome_message'), {slack_command: slackCommand, link: helpLink}),
         });
-
+      if(uConfig===null) {
+        uConfig = {
+          team_id: teamOrEntId,
+          user_id: event.user,
+        }
+      }
+      uConfig.flag.welcome_send = true;
+      uConfig.flag.welcome_send_ts = new Date();
         await userCol.replaceOne({
           team_id: teamOrEntId,
           user_id: event.user,
-          }, {
-            team_id: teamOrEntId,
-            user_id: event.user,
-            flag: {
-              welcome_send: true,
-              welcome_send_ts: new Date(),
-            },
-          }, {
+          },
+          uConfig
+          , {
             upsert: true,
           }
         );
@@ -2332,6 +2334,67 @@ async function processCommand(ack, body, client, command, context, say, respond)
               text: `Usage:\n/${slackCommand} config read` +
                   `\n${validWritePara}`
               ,
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+          }
+
+        } else if (cmdBody.startsWith('user_config')) {
+          await respond(`/${slackCommand} ${command.text}`);
+          fetchArgs = false;
+          cmdBody = cmdBody.substring(11).trim();
+
+          let uConfig = await getUserConfig(teamOrEntId,userId);
+          if(uConfig===null) {
+            uConfig = {
+              team_id: teamOrEntId,
+              user_id: userId,
+            }
+          }
+
+          if (cmdBody.startsWith("reset")) {
+            cmdBody = cmdBody.substring(5).trim();
+
+            let configTxt = `Usage: /${slackCommand} user_config reset true`;
+
+            if (cmdBody.startsWith('true')) {
+              configTxt = "Reset user_config to default stage.";
+
+              uConfig.flag = {
+                reset_ts: new Date()
+              };
+              try {
+                await userCol.replaceOne({
+                      team_id: teamOrEntId,
+                      user_id: userId,
+                    },
+                    uConfig
+                    , {
+                      upsert: true,
+                    }
+                );
+              } catch (e) {
+                configTxt = "Reset user_config FAILED!";
+              }
+            }
+
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              //blocks: blocks,
+              text: `${configTxt}`,
+            };
+            await postChat(body.response_url, 'ephemeral', mRequestBody);
+            return;
+
+          } else {
+            let mRequestBody = {
+              token: context.botToken,
+              channel: channel,
+              user: userId,
+              //blocks: blocks,
+              text: `Command missing`,
             };
             await postChat(body.response_url, 'ephemeral', mRequestBody);
             return;
