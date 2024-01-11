@@ -66,6 +66,7 @@ const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectab
 
 const mClient = new MongoClient(config.get('mongo_url'));
 let orgCol = null;
+let userCol = null;
 let votesCol = null;
 let closedCol = null;
 let hiddenCol = null;
@@ -218,6 +219,7 @@ try {
   logger.info('Connected successfully to server')
   const db = mClient.db(config.get('mongo_db_name'));
   orgCol = db.collection('token');
+  userCol = db.collection('user_config');
   votesCol = db.collection('votes');
   closedCol = db.collection('closed');
   hiddenCol = db.collection('hidden');
@@ -236,6 +238,7 @@ try {
 const createDBIndex = async () => {
   orgCol.createIndex({"team.id": 1});
   orgCol.createIndex({"enterprise.id": 1});
+  userCol.createIndex({team_id: 1, user_id: 1});
   votesCol.createIndex({ channel: 1, ts: 1 });
   votesCol.createIndex({ poll_id: 1 });
   closedCol.createIndex({ channel: 1, ts: 1 });
@@ -693,6 +696,24 @@ const getTeamInfo = async (mTeamId) => {
           $or: [
             {'team.id': mTeamId},
             {'enterprise.id': mTeamId},
+          ]
+        }
+    );
+  }
+  catch (e) {
+
+  }
+  return ret;
+}
+
+const getUserConfig = async (mTeamId,mUserId) => {
+  let ret = {};
+  try {
+    ret = await userCol.findOne(
+        {
+          $and: [
+            {'team_id': mTeamId},
+            {'user_id': mUserId},
           ]
         }
     );
@@ -1280,6 +1301,38 @@ app.event('app_home_opened', async ({ event, client, context }) => {
     const teamConfig = await getTeamOverride(teamOrEntId);
     let appLang = gAppLang;
     if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
+
+    if (event.tab === 'messages') {
+
+      const uConfig = await getUserConfig(teamOrEntId,event.user);
+    if(uConfig!==null && uConfig.flag?.hasOwnProperty("welcome_send") && uConfig.flag?.welcome_send === true) {
+
+      } else {
+        // Post a welcome message to the user
+        await client.chat.postMessage({
+          channel: event.channel,
+          text: parameterizedString(stri18n(appLang, 'info_welcome_message'), {slack_command: slackCommand, link: helpLink}),
+        });
+
+        await userCol.replaceOne({
+          team_id: teamOrEntId,
+          user_id: event.user,
+          }, {
+            team_id: teamOrEntId,
+            user_id: event.user,
+            flag: {
+              welcome_send: true,
+              welcome_send_ts: new Date(),
+            },
+          }, {
+            upsert: true,
+          }
+        );
+
+      }
+
+    }
+
     const result = await client.views.publish({
       user_id: event.user,
       view: {
