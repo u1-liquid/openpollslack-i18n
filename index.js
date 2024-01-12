@@ -1319,6 +1319,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
           user_id: event.user,
         }
       }
+      if(!uConfig.hasOwnProperty('flag')) uConfig.flag = { }
       uConfig.flag.welcome_send = true;
       uConfig.flag.welcome_send_ts = new Date();
         await userCol.replaceOne({
