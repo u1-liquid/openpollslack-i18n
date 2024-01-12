@@ -206,17 +206,27 @@ Delete all schedules that already finished, done, no longer valid, disabled
 It is not required to run `/poll schedule delete_done` as server will clear out unused schedules for you.
 if you host this by your self you can make change this in `schedule_auto_delete_invalid_day`
 
-## User config
+# Override configuration 
 
-Read or set config for yourself (No user config avaliable at this time)
+There are three levels of configuration: Server, Team, and User. 
+
+The User configuration has the highest priority, followed by Team, and then Server. 
+
+Please note that some configurations may not be available for override at certain levels.
+
+
+## User configuration (Override Team configuration)
+
+Read or set config for yourself, If both User and Team config exist; User config will be used.
 Usage:
 ```
 /poll user_config read
 /poll user_config write [config_name]
+/poll user_config write user_allow_dm [true/false]
 /poll user_config reset
 ```
 
-## Team config (Override Server config)
+## Team configuration (Override Server configuration)
 
 If some of your team would like to using different config than what is on default.json you can use `/poll config` .
 - This command only work on user who install app to Slack only
@@ -240,7 +250,7 @@ Usage:
 /poll config write delete_data_on_poll_delete [true/false]
 ```
 
-## Self-host: Server config (config/default.json)
+## Self-host: Server configuration (config/default.json)
 - `mongo_url`: the url to connect to your mongo database
 - `mongo_db_name`: your mongo database name (Main DB)
 - `app_lang` for translation (Please put language file in language folder), Translate some text to Thai (th-ภาษาไทย)

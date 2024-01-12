@@ -64,6 +64,8 @@ const gScheduleAutoDeleteDay = config.get('schedule_auto_delete_invalid_day');
 
 const validTeamOverrideConfigTF = ["create_via_cmd_only","app_lang_user_selectable","menu_at_the_end","compact_ui","show_divider","show_help_link","show_command_info","true_anonymous","add_number_emoji_to_choice","add_number_emoji_to_choice_btn","delete_data_on_poll_delete","app_allow_dm"];
 
+const validUserOverrideConfigTF = ["user_allow_dm"];
+
 const mClient = new MongoClient(config.get('mongo_url'));
 let orgCol = null;
 let userCol = null;
@@ -443,7 +445,8 @@ const checkAndExecuteTasks = async () => {
               //last one
               dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti_done'), {info:"",poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} );
             } else {
-              dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
+              //Dont spam user!
+              //dmOwnerString = parameterizedString(stri18n(gAppLang,'task_scheduled_post_noti'), {poll_id:task.poll_id,poll_cmd:pollData.cmd,ts:localizeTS,note:`\n${cmdNote}`} )
             }
 
             await scheduleCol.updateOne(
@@ -464,9 +467,20 @@ const checkAndExecuteTasks = async () => {
           console.log(e);
         }
       }
+      //get user config
+      let isUserAllowDM = isAppAllowDM;
+      if(pollData?.team !== null && mTaskOwner !== null) {
+        let uConfig = await getUserConfig(pollData?.team??null,mTaskOwner??null);
+        if(uConfig?.config?.hasOwnProperty('user_allow_dm')) {
+          isUserAllowDM = uConfig.config.user_allow_dm;
+        }
+      }
+
+
       try {
         if(dmOwnerString !== null && mTaskOwner!==null) {
-          if (isAppAllowDM) {
+
+          if (isUserAllowDM) {
             let mRequestBody = {
               token: mBotToken,
               channel: mTaskOwner,
@@ -567,7 +581,7 @@ const checkAndExecuteTasks = async () => {
 
       try {
         if(dmOwnerString !== null && mTaskOwner!==null) {
-          if (isAppAllowDM) {
+          if (isUserAllowDM) {
             let mRequestBody = {
               token: mBotToken,
               channel: mTaskOwner,
@@ -1302,10 +1316,10 @@ app.event('app_home_opened', async ({ event, client, context }) => {
     let appLang = gAppLang;
     if (teamConfig.hasOwnProperty("app_lang")) appLang = teamConfig.app_lang;
 
-    if (event.tab === 'messages') {
+    //if (event.tab === 'messages') {
 
       let uConfig = await getUserConfig(teamOrEntId,event.user);
-    if(uConfig!==null && uConfig.flag?.hasOwnProperty("welcome_send") && uConfig.flag?.welcome_send === true) {
+      if(uConfig!==null && uConfig.flag?.hasOwnProperty("welcome_send") && uConfig.flag?.welcome_send === true) {
 
       } else {
         // Post a welcome message to the user
@@ -1334,7 +1348,7 @@ app.event('app_home_opened', async ({ event, client, context }) => {
 
       }
 
-    }
+    //}
 
     const result = await client.views.publish({
       user_id: event.user,
@@ -1790,10 +1804,10 @@ async function processCommand(ack, body, client, command, context, say, respond)
                   dataToInsert, // New document to be inserted
                   {upsert: true} // Option to insert a new document if no matching document is found
               );
-
+              let localizeTS = await getAndlocalizeTimeStamp(context.botToken,userId,schTs);
               let actString = "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'task_scheduled'), {
                 poll_id: schPollID,
-                ts: schTsText,
+                ts: localizeTS,
                 poll_ch: schCH,
                 run_max: schMAXRUN
               });
@@ -2345,6 +2359,11 @@ async function processCommand(ack, body, client, command, context, say, respond)
           fetchArgs = false;
           cmdBody = cmdBody.substring(11).trim();
 
+          let validWritePara = ""
+          for (const eachOverrideable of validUserOverrideConfigTF) {
+            validWritePara += `\n/${slackCommand} user_config write ${eachOverrideable} [true/false]`;
+          }
+
           let uConfig = await getUserConfig(teamOrEntId,userId);
           if(uConfig===null) {
             uConfig = {
@@ -2389,18 +2408,125 @@ async function processCommand(ack, body, client, command, context, say, respond)
             await postChat(body.response_url, 'ephemeral', mRequestBody);
             return;
 
-          } else {
+          } else if (cmdBody.startsWith("read")) {
+
+            let configTxt = "Config: not found";
+            if (uConfig) {
+              if (uConfig.hasOwnProperty("config")) {
+                configTxt = "User Config:\n```" + JSON.stringify(uConfig.config) + "```";
+
+              } else {
+                configTxt = "No User Config: using server default";
+              }
+            }
+
+
             let mRequestBody = {
               token: context.botToken,
               channel: channel,
               user: userId,
               //blocks: blocks,
-              text: `Command missing`,
+              text: `${configTxt}`,
             };
             await postChat(body.response_url, 'ephemeral', mRequestBody);
             return;
-          }
+          } else if (cmdBody.startsWith("write")) {
+            cmdBody = cmdBody.substring(5).trim();
 
+            let inputPara = (cmdBody.substring(0, cmdBody.indexOf(' ')));
+            let isWriteValid = false;
+
+            if (validUserOverrideConfigTF.includes(inputPara)) {
+              cmdBody = cmdBody.substring(inputPara.length).trim();
+              isWriteValid = true;
+            }
+
+            if (isWriteValid) {
+              let inputVal = cmdBody.trim();
+
+              if (cmdBody.startsWith("true")) {
+                inputVal = true;
+              } else if (cmdBody.startsWith("false")) {
+                inputVal = false;
+              } else {
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  user: userId,
+                  //blocks: blocks,
+                  text: `Usage: ${inputPara} [true/false]`,
+                };
+                await postChat(body.response_url, 'ephemeral', mRequestBody);
+                return;
+              }
+
+              if (!uConfig.hasOwnProperty("config")) uConfig.config = {};
+
+              uConfig.config.isset = true;
+              uConfig.config[inputPara] = inputVal;
+              //logger.info(team);
+              try {
+                //await orgCol.replaceOne({'team.id': getTeamOrEnterpriseId(body)}, team);
+                await userCol.replaceOne(
+                    {
+                      team_id: teamOrEntId,
+                      user_id: userId,
+                    }
+                    ,
+                    uConfig
+                    ,
+                    {
+                      upsert: true,
+                    });
+              } catch (e) {
+                logger.error(e);
+                let mRequestBody = {
+                  token: context.botToken,
+                  channel: channel,
+                  user: userId,
+                  //blocks: blocks,
+                  text: `Error while update [${inputPara}] to [${inputVal}]`,
+                };
+                await postChat(body.response_url, 'ephemeral', mRequestBody);
+                return;
+
+              }
+
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: `[${inputPara}] is set to [${inputVal}] for this User`,
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+              return;
+
+            } else {
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: `[${inputPara}] is not valid user_config parameter or value is missing\nUsage: ${validWritePara}`,
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+              return;
+            }
+
+          } else {
+              let mRequestBody = {
+                token: context.botToken,
+                channel: channel,
+                user: userId,
+                //blocks: blocks,
+                text: `Usage:\n/${slackCommand} user_config read` +
+                    `${validWritePara}` +
+                    `\n/${slackCommand} user_config reset`,
+              };
+              await postChat(body.response_url, 'ephemeral', mRequestBody);
+              return;
+          }
         }
       }
 
@@ -2563,9 +2689,10 @@ async function processCommand(ack, body, client, command, context, say, respond)
               dataToInsert, // New document to be inserted
               {upsert: true} // Option to insert a new document if no matching document is found
           );
+          let localizeTS = await getAndlocalizeTimeStamp(context.botToken,userId,schTs);
           let actString = "```" + fullCmd + "```\n" + parameterizedString(stri18n(userLang, 'task_scheduled'), {
             poll_id: pollID,
-            ts: postDateTime,
+            ts: localizeTS,
             poll_ch: null,
             cron_string: null,
             run_max: 1
@@ -4290,6 +4417,12 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
     if (privateMetadata.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = privateMetadata.add_number_emoji_to_choice_btn;
     else if (teamConfig.hasOwnProperty("add_number_emoji_to_choice_btn")) isShowNumberInChoiceBtn = teamConfig.add_number_emoji_to_choice_btn;
 
+    let isUserAllowDM = isAppAllowDM;
+    let uConfig = await getUserConfig(teamOrEntId,userId);
+    if(uConfig?.config?.hasOwnProperty('user_allow_dm')) {
+      isUserAllowDM = uConfig.config.user_allow_dm;
+    }
+
     let cmd_via;
     if (response_url !== undefined && response_url !== "") cmd_via = "modal_auto"
     else cmd_via = "modal_manual";
@@ -4304,7 +4437,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
       ackErr.errors[elementToAlert] = parameterizedString(stri18n(appLang, 'err_slack_limit_choices_max'), {slack_limit_choices: gSlackLimitChoices});
       await ack(ackErr);
 
-      if(isAppAllowDM) {
+      if(isUserAllowDM) {
         try {
           let mRequestBody = {
             token: context.botToken,
@@ -4354,7 +4487,7 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
         ackErr.errors[elementToAlert] = `Error while create poll:${postRes.message}`;
         await ack(ackErr);
 
-        if(isAppAllowDM) {
+        if(isUserAllowDM) {
           try {
             let mRequestBody = {
               token: context.botToken,
@@ -4407,9 +4540,11 @@ app.view('modal_poll_submit', async ({ ack, body, view, context,client }) => {
             dataToInsert, // New document to be inserted
             {upsert: true} // Option to insert a new document if no matching document is found
         );
+        let localizeTS = await getAndlocalizeTimeStamp(context.botToken,userId,schTs);
         let actString = "```" + cmd + "```\n" + parameterizedString(stri18n(userLang, 'task_scheduled'), {
           poll_id: pollID,
-          ts: isoStr,
+          ts: localizeTS,
+          //ts: isoStr,
           poll_ch: null,
           cron_string: null,
           run_max: 1

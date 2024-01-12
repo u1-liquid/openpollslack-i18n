@@ -5,7 +5,7 @@
   "bot_name": "Open Poll Plus",
   "app_lang": "en",
   "app_lang_user_selectable": true,
-  "app_allow_dm": false,
+  "app_allow_dm": true,
   "app_datetime_format": "YYYY-MM-DDTHH:mm:ssZ (ddd)",
   "slack_limit_choices": 15,
   "use_response_url": true,
