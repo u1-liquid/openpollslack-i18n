@@ -964,6 +964,13 @@ const postChat = async (url,type,requestBody) => {
     ) {
       logger.error('Team not found/not granted error : ignored');
       ret.message = "Team not found/not grante error : ignored"+` ${addChNotFoundErr}`;
+    }
+    else if (
+        e && e.data && e.data && e.data.error
+        && 'message_not_found' === e.data.error
+    ) {
+      logger.error('message_not_found error : ignored');
+      ret.message = "message_not_found error : ignored"+` ${addChNotFoundErr}`;
     } else {
       logger.error(e);
       console.log(e);
