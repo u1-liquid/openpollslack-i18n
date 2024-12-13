@@ -170,7 +170,7 @@ NOTE: If a cron expression results in having more than 1 job within `schedule_li
 ```
 
 ##### Example
-- `30 8 * * *` -> at 8:00 AM, Every day
+- `30 8 * * *` -> at 8:30 AM, Every day
 - `10 * * 1,3,5` -> at 10:00 AM on every Monday, Wednesday, and Friday.
 - `45 13 * * 1-5` -> at 1:45 PM on every Monday to Friday.
 - `15 9 * * 5L` -> at 9:15 AM on last Friday of every month.
