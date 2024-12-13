@@ -137,8 +137,8 @@ Schedule a poll that create by yourself:
 Example:
 ```
 /poll schedule create 0123456789abcdef01234567 2023-11-18T08:00:00+07:00
-/poll schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 - "30 12 15 * *" 12
-/poll schedule create 0123456789abcdef01234567 2023-11-15T10:30:00+07:00 C0000000000 "30 12 15 * *" 12
+/poll schedule create 0123456789abcdef01234567 2023-11-15T12:31:00+07:00 - "30 12 15 * *" 12
+/poll schedule create 0123456789abcdef01234567 2023-11-15T12:31:00+07:00 C0000000000 "30 12 15 * *" 12
 ```
 Schedule poll that create by others in your team
 (this command only work on user who install app to Slack only):
@@ -154,6 +154,8 @@ Schedule poll that create by others in your team
   - To get channel ID: go to your channel, Click down arrow next to channel name, channel ID will be at the very bottom.
 - `CRON_EXP` = (Optional) Do not set to run once, or put [cron expression](https://github.com/polppol/openpollslack-i18n#supported-cron-expression-format) in UTC Timezone (with `"`Double Quote`"`) here (eg. `"30 12 15 * *"` , Post poll 12:30 PM on the 15th day of every month in UTC).
 - `MAX_RUN` = (Optional) Do not set to run maximum time that server allows (`schedule_max_run` times), After Run Counter greater than this number; schedule will disable itself.
+- To prevent double post of first Recurring poll [TS] for first schedule should a bit after time that you put in [CRON_EXP]
+  - eg. You want poll every day 12:30AM (`"30 12 * * *"`) starting from 2024-12-12 UTC, your [TS] shoud be like `2024-12-12T12:31:00+00:00` (1 minute after)
 
 NOTE: If a cron expression results in having more than 1 job within `schedule_limit_hrs` hours, the Poll will post once, and then the job will get disabled.
 

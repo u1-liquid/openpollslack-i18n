@@ -1791,6 +1791,8 @@ async function processCommand(ack, body, client, command, context, say, respond)
 
               schTs = new Date(schTsText);
 
+              if(schCron===null) schMAXRUN = 1;
+
               const dataToInsert = {
                 poll_id: new ObjectId(schPollID),
                 next_ts: schTs,
